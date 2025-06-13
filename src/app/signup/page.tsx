@@ -13,12 +13,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, LifeBuoy } from 'lucide-react';
+import { UserPlus, AlertTriangle, LifeBuoy, Loader2 } from 'lucide-react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { createUserProfileInFirestore } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
+import type { UserProfile } from '@/lib/firestoreService';
+
 
 const signupSchemaBase = z.object({
   displayName: z.string().min(3, 'Display name must be at least 3 characters'),
@@ -45,6 +47,10 @@ const signupSchema = signupSchemaBase
 
 
 type SignupFormValues = z.infer<typeof signupSchema>;
+
+// Define a type for the minimal data sent from signup to firestoreService
+type MinimalProfileDataForCreation = Pick<UserProfile, 'email' | 'displayName' | 'role'>;
+
 
 export default function SignupPage() {
   const router = useRouter();
@@ -89,7 +95,7 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
-    console.log('[SignupPage] Attempting sign up with data:', data);
+    console.log('[SignupPage] Attempting sign up with form data:', data);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
@@ -108,13 +114,15 @@ export default function SignupPage() {
             console.warn('[SignupPage] auth.currentUser is null unexpectedly before creating Firestore profile.');
         }
 
-        // Create user profile in Firestore
-        await createUserProfileInFirestore(firebaseUser.uid, {
+        // Prepare a very clean and minimal profileData object for Firestore
+        const profileDataForFirestore: MinimalProfileDataForCreation = {
           email: data.email,
           displayName: data.displayName,
           role: data.role,
-          // photoURL can be added later or set to a default
-        });
+        };
+        console.log('[SignupPage] Minimal profileData being sent to createUserProfileInFirestore:', profileDataForFirestore);
+
+        await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
         console.log('[SignupPage] User profile creation in Firestore requested for UID:', firebaseUser.uid);
 
 
@@ -135,8 +143,10 @@ export default function SignupPage() {
         errorMessage = 'This email address is already in use.';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'The password is too weak.';
-      } else if (error.message && error.message.includes("PERMISSION_DENIED")){
-        errorMessage = "Sign up succeeded in Auth, but failed to save profile to database due to permissions. Contact admin.";
+      } else if (error.code === 'invalid-argument' && error.message && error.message.includes("Unsupported field value: undefined")) {
+        errorMessage = `Sign up failed due to invalid data: ${error.message}`;
+      } else if (error.message && (error.message.includes("PERMISSION_DENIED") || error.message.includes("Missing or insufficient permissions"))){
+        errorMessage = "Sign up failed. Could not save profile to database due to permissions. Please contact an administrator or check Firestore rules.";
       }
       toast({ title: 'Sign Up Failed', description: errorMessage, variant: 'destructive' });
     } finally {
@@ -247,6 +257,7 @@ export default function SignupPage() {
             </CardContent>
             <CardFooter className="flex flex-col items-center">
               <Button type="submit" className="w-full text-lg py-6" disabled={isSigningUp || firebaseNotConfigured}>
+                {isSigningUp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {isSigningUp ? 'Creating Account...' : 'Create Account'}
               </Button>
               <Link href="/login" className="mt-4 text-primary hover:underline text-sm">
@@ -263,4 +274,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
