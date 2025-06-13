@@ -54,14 +54,15 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     const userSnap = await getDoc(userDocRef);
     if (userSnap.exists()) {
       const data = userSnap.data();
+      // Ensure role is valid or null
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
       return {
-        uid,
+        uid, // Ensure uid from the doc id is preferred or consistent
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL,
-        createdAt: data.createdAt,
+        createdAt: data.createdAt, // This should be a Firestore Timestamp
         coachId: data.coachId,
         stripeCustomerId: data.stripeCustomerId,
       } as UserProfile;
@@ -69,17 +70,17 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     console.log(`No user profile found for UID: ${uid}`);
     return null;
   } catch (error: any) {
-    console.error(`Error fetching user profile for UID ${uid}. Raw Firebase error:`, error);
-    if (error instanceof Error) {
-      if (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized")) {
-        throw error; // Re-throw specific configuration errors
-      }
-      // For other errors, throw a new error that includes the original message and code if available
-      const firebaseErrorCode = (error as any).code || 'N/A';
-      throw new Error(`Failed to fetch user profile for UID ${uid}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    console.error(`Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
+    const baseMessage = `Failed to fetch user profile for UID ${uid}.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+    
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw new Error(error.message); // Re-throw specific configuration errors
     }
-    // Fallback for non-Error objects
-    throw new Error(`Failed to fetch user profile for UID ${uid}. An unknown error occurred.`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -87,24 +88,26 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
   ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
-    await setDoc(userDocRef, {
+    // Ensure createdAt is handled correctly: use provided one or serverTimestamp
+    const dataToSet = {
       ...profileData,
-      uid, // Ensure uid is part of the document data itself
-      createdAt: profileData.createdAt || serverTimestamp(), // Use provided createdAt or serverTimestamp
-    });
+      uid, // Explicitly set uid in the document data as well
+      createdAt: profileData.createdAt instanceof Timestamp ? profileData.createdAt : serverTimestamp(),
+    };
+    await setDoc(userDocRef, dataToSet);
     console.log(`User profile created/updated in Firestore for UID: ${uid}`);
   } catch (error: any) {
-    console.error(`Error creating/updating user profile in Firestore for UID ${uid}. Raw Firebase error:`, error);
-    if (error instanceof Error) {
-        if (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized")) {
-            throw error; // Re-throw specific configuration errors
-        }
-        // For other errors, throw a new error that includes the original message and code if available
-        const firebaseErrorCode = (error as any).code || 'N/A';
-        throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    console.error(`Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
+    const baseMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw new Error(error.message);
     }
-    // Fallback for non-Error objects
-    throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. An unknown error occurred.`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -133,12 +136,17 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
       } as Session;
     });
   } catch (error: any) {
-    console.error(`Error fetching client sessions for client ID ${clientId}. Raw Firebase error:`, error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+    console.error(`Detailed Firebase Error in getClientSessions for clientID ${clientId}:`, error);
+    const baseMessage = `Failed to fetch client sessions for client ID ${clientId}.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    const firebaseErrorCode = (error as any).code || 'N/A';
-    throw new Error(`Failed to fetch client sessions for client ID ${clientId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -165,12 +173,17 @@ export async function getCoachSessions(coachId: string): Promise<Session[]> {
       } as Session;
     });
   } catch (error: any) {
-    console.error(`Error fetching coach sessions for coach ID ${coachId}. Raw Firebase error:`, error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+    console.error(`Detailed Firebase Error in getCoachSessions for coachID ${coachId}:`, error);
+    const baseMessage = `Failed to fetch coach sessions for coach ID ${coachId}.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+    
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    const firebaseErrorCode = (error as any).code || 'N/A';
-    throw new Error(`Failed to fetch coach sessions for coach ID ${coachId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -186,13 +199,19 @@ export async function logSession(sessionData: NewSessionData): Promise<string> {
     });
     console.log(`Session logged with ID: ${docRef.id}`);
     return docRef.id;
-  } catch (error: any) {
-    console.error("Error logging session. Raw Firebase error:", error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+  } catch (error: any)
+ {
+    console.error(`Detailed Firebase Error in logSession:`, error);
+    const baseMessage = `Failed to log session.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    const firebaseErrorCode = (error as any).code || 'N/A';
-    throw new Error(`Failed to log session. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -212,12 +231,17 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
     console.log(`No session found with ID: ${sessionId}`);
     return null;
   } catch (error: any) {
-    console.error(`Error fetching session by ID ${sessionId}. Raw Firebase error:`, error);
-     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+    console.error(`Detailed Firebase Error in getSessionById for sessionID ${sessionId}:`, error);
+    const baseMessage = `Failed to fetch session by ID ${sessionId}.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+    
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    const firebaseErrorCode = (error as any).code || 'N/A';
-    throw new Error(`Failed to fetch session by ID ${sessionId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -234,12 +258,17 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
     await updateDoc(sessionDocRef, updateData);
     console.log(`Session updated: ${sessionId}`);
   } catch (error: any) {
-    console.error(`Error updating session ${sessionId}. Raw Firebase error:`, error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+    console.error(`Detailed Firebase Error in updateSession for sessionID ${sessionId}:`, error);
+    const baseMessage = `Failed to update session ${sessionId}.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    const firebaseErrorCode = (error as any).code || 'N/A';
-    throw new Error(`Failed to update session ${sessionId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    throw new Error(detailedMessage);
   }
 }
 
@@ -262,14 +291,16 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
       } as Session;
     });
   } catch (error: any) {
-    console.error("Error fetching all sessions for admin. Raw Firebase error:", error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+    console.error(`Detailed Firebase Error in getAllSessionsForAdmin:`, error);
+    const baseMessage = `Failed to fetch all sessions for admin.`;
+    let detailedMessage = baseMessage;
+    if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
+    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
+    else detailedMessage += ` An unknown error occurred.`;
+
+    if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    const firebaseErrorCode = (error as any).code || 'N/A';
-    throw new Error(`Failed to fetch all sessions for admin. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
+    throw new Error(detailedMessage);
   }
 }
-
-
-    
