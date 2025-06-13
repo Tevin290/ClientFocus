@@ -1,8 +1,8 @@
 
 'use server';
 
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase'; // auth imported for logging
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
+import { db, isFirebaseConfigured, auth } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
@@ -26,7 +26,7 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   photoURL?: string;
-  createdAt: Timestamp; // Firestore Timestamp
+  createdAt: Timestamp; // Firestore Timestamp for read
   coachId?: string;
   stripeCustomerId?: string;
 }
@@ -49,27 +49,27 @@ export interface NewSessionData {
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   ensureFirebaseIsOperational();
-  console.log(`[firestoreService] getUserProfile called for UID: ${uid}. Current auth UID: ${auth.currentUser?.uid}`);
-  // if (auth.currentUser) {
-  //   console.log(`[firestoreService] Current auth.currentUser.uid in getUserProfile: ${auth.currentUser.uid}`);
-  // } else {
-  //   console.log(`[firestoreService] No auth.currentUser in getUserProfile when fetching for: ${uid}`);
-  // }
+  console.log(`[firestoreService] getUserProfile called for UID: ${uid}.`);
+  // Log current auth user for context, useful for debugging rules if it were a permission issue
+  if (auth.currentUser) {
+    console.log(`[firestoreService] Current auth.currentUser.uid in getUserProfile: ${auth.currentUser.uid}`);
+  } else {
+    console.log(`[firestoreService] No auth.currentUser in getUserProfile when fetching for: ${uid}`);
+  }
   try {
     const userDocRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userDocRef);
     if (userSnap.exists()) {
       const data = userSnap.data();
-      // Ensure role is valid or null
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
       console.log(`[firestoreService] Profile found for UID ${uid}, role: ${role}`);
       return {
-        uid, // ensure uid from doc path is used if it's the primary key, or from data if stored within
+        uid,
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL,
-        createdAt: data.createdAt, // This should be a Firestore Timestamp
+        createdAt: data.createdAt,
         coachId: data.coachId,
         stripeCustomerId: data.stripeCustomerId,
       } as UserProfile;
@@ -80,47 +80,65 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     console.error(`[firestoreService] Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
     let detailedMessage = `Failed to fetch user profile for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
-    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
-    else detailedMessage += ` An unknown error occurred.`;
-
+    if (error.message) {
+        detailedMessage += ` Original error: ${error.message}.`;
+    } else {
+        detailedMessage += ` An unknown error occurred.`;
+    }
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw error; // Re-throw specific configuration errors
+      throw error;
     }
     throw new Error(detailedMessage);
   }
 }
 
-// profileData will contain email, displayName, role, and optionally photoURL from the signup form
 export async function createUserProfileInFirestore(
-  uid: string, // UID from Firebase Auth
-  profileData: Omit<UserProfile, 'uid' | 'createdAt'> & {createdAt?: any} // Contains email, displayName, role, photoURL?
+  uid: string,
+  profileData: Omit<UserProfile, 'uid' | 'createdAt' | 'createdAt'> // `createdAt` is handled by serverTimestamp
 ): Promise<void> {
   ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
 
-    // Explicitly construct the object to be written to Firestore
-    // This ensures that the `uid` field in the document data is the one from Firebase Auth
-    const dataToSet: UserProfile = {
-      uid: uid, // This is request.auth.uid in security rules context
+    // Construct the base object with required fields
+    const dataForFirestore: {
+      uid: string;
+      email: string;
+      displayName: string;
+      role: UserRole;
+      createdAt: FieldValue; // Use FieldValue for serverTimestamp
+      photoURL?: string;
+      coachId?: string;
+      stripeCustomerId?: string;
+    } = {
+      uid: uid,
       email: profileData.email,
       displayName: profileData.displayName,
       role: profileData.role,
-      photoURL: profileData.photoURL || undefined, // Set to undefined if not provided
-      createdAt: serverTimestamp() as Timestamp, // Firestore server timestamp
-      // coachId and stripeCustomerId will be undefined unless explicitly set later
+      createdAt: serverTimestamp(),
     };
 
-    console.log('[firestoreService] Attempting to create user profile for UID (argument):', uid);
-    console.log('[firestoreService] Profile data received (argument):', JSON.stringify(profileData, null, 2));
-    console.log('[firestoreService] FINAL dataToSet being written to Firestore:', JSON.stringify(dataToSet, (key, value) => {
-      // Crude way to represent serverTimestamp in log, Firestore handles it specially
+    // Conditionally add optional fields ONLY if they have a meaningful value (not undefined, null, or empty string)
+    if (profileData.photoURL && profileData.photoURL.trim() !== '') {
+      dataForFirestore.photoURL = profileData.photoURL;
+    }
+    // coachId and stripeCustomerId are not typically part of initial signup form data used here,
+    // but if they were, they'd be handled similarly:
+    if (profileData.coachId && profileData.coachId.trim() !== '') {
+      dataForFirestore.coachId = profileData.coachId;
+    }
+    if (profileData.stripeCustomerId && profileData.stripeCustomerId.trim() !== '') {
+      dataForFirestore.stripeCustomerId = profileData.stripeCustomerId;
+    }
+
+    console.log(`[firestoreService] Attempting to create user profile for UID (argument): ${uid}`);
+    console.log(`[firestoreService] Profile data received (argument):`, JSON.stringify(profileData, null, 2));
+    console.log('[firestoreService] FINAL dataToSet being written to Firestore:', JSON.stringify(dataForFirestore, (key, value) => {
       if (typeof value === 'object' && value !== null && value.constructor && value.constructor.name === 'TimestampFieldValue') {
         return '(ServerTimestamp)';
       }
       return value;
     }, 2));
-
 
     if (auth.currentUser) {
         console.log('[firestoreService] Current Firebase Auth user (client-side) before setDoc:', auth.currentUser.uid, auth.currentUser.email, 'Display Name:', auth.currentUser.displayName);
@@ -131,21 +149,30 @@ export async function createUserProfileInFirestore(
         console.warn('[firestoreService] auth.currentUser is null unexpectedly before setDoc. This is highly unusual if called after signup success.');
     }
 
-    await setDoc(userDocRef, dataToSet);
+    await setDoc(userDocRef, dataForFirestore);
     console.log(`[firestoreService] User profile created/updated in Firestore for UID: ${uid}`);
   } catch (error: any) {
     console.error(`[firestoreService] Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
     let detailedMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
-    if (error.message) detailedMessage += ` Original error: ${error.message}.`;
-    else detailedMessage += ` An unknown error occurred.`;
+    if (error.message) {
+        detailedMessage += ` Original error: ${error.message}.`;
+        if (error.message.includes("Unsupported field value: undefined")) {
+            detailedMessage += " This means an optional field was passed as undefined instead of being omitted or set to null.";
+        }
+    } else {
+        detailedMessage += ` An unknown error occurred.`;
+    }
 
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
+    // Log the data object that was attempted to be written to Firestore
+    console.error('[firestoreService] Data that was attempted to be written (and caused error):', JSON.stringify(profileData, null, 2)); // Logging profileData for now, but should ideally log dataForFirestore if it was constructed
     throw new Error(detailedMessage);
   }
 }
+
 
 // --- Session Management ---
 
@@ -340,5 +367,3 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(detailedMessage);
   }
 }
-
-    
