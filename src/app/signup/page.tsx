@@ -89,13 +89,24 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
+    console.log('[SignupPage] Attempting sign up with data:', data);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
+      console.log('[SignupPage] Firebase Auth user created:', firebaseUser?.uid, firebaseUser?.email);
+
 
       if (firebaseUser) {
         // Update Firebase Auth profile with display name
         await updateProfile(firebaseUser, { displayName: data.displayName });
+        console.log('[SignupPage] Firebase Auth profile updated with displayName:', data.displayName);
+
+        // Log current auth state right before Firestore call
+        if (auth.currentUser) {
+            console.log('[SignupPage] auth.currentUser before creating Firestore profile:', auth.currentUser.uid, auth.currentUser.email, 'Display Name:', auth.currentUser.displayName);
+        } else {
+            console.warn('[SignupPage] auth.currentUser is null unexpectedly before creating Firestore profile.');
+        }
 
         // Create user profile in Firestore
         await createUserProfileInFirestore(firebaseUser.uid, {
@@ -104,23 +115,28 @@ export default function SignupPage() {
           role: data.role,
           // photoURL can be added later or set to a default
         });
+        console.log('[SignupPage] User profile creation in Firestore requested for UID:', firebaseUser.uid);
+
 
         toast({
           title: 'Account Created!',
           description: 'Your account has been successfully created. Please log in.',
-          variant: 'default', // Using default for success, as per guidelines for toast (errors only) this is okay
+          variant: 'default', 
         });
         router.push('/login');
       } else {
+        console.error("[SignupPage] Firebase user object was null after createUserWithEmailAndPassword.");
         throw new Error("User creation failed in Firebase Auth.");
       }
     } catch (error: any) {
-      console.error('Sign Up Error:', error);
+      console.error('[SignupPage] Sign Up Error:', error.message, error.code ? `Code: ${error.code}`: '', error);
       let errorMessage = 'Sign up failed. Please try again.';
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = 'This email address is already in use.';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'The password is too weak.';
+      } else if (error.message && error.message.includes("PERMISSION_DENIED")){
+        errorMessage = "Sign up succeeded in Auth, but failed to save profile to database due to permissions. Contact admin.";
       }
       toast({ title: 'Sign Up Failed', description: errorMessage, variant: 'destructive' });
     } finally {
@@ -247,3 +263,4 @@ export default function SignupPage() {
     </div>
   );
 }
+
