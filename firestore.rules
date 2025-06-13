@@ -9,83 +9,67 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
+    // Helper function to check if the user is the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function to check email domain (kept for session rules)
+    function isHmPerformEmail() {
+      return request.auth.token.email != null && request.auth.token.email.matches('.*@hmperform\\.com$');
+    }
+
     // Users Collection
     match /users/{userId} {
-      // Allow create:
-      // 1. User must be authenticated.
-      // 2. The UID in the document being created must match the authenticated user's UID.
-      // THIS IS VERY LENIENT FOR TESTING SIGN-UP
+      // VERY LENIENT CREATE RULE:
+      // User must be authenticated.
+      // The UID in the document being created MUST match the authenticated user's UID.
+      // The email in the document being created MUST match the authenticated user's email.
+      // No other restrictions on role or email domain for create.
       allow create: if isAuthenticated() &&
-                       request.resource.data.uid == request.auth.uid;
+                       request.resource.data.uid == request.auth.uid &&
+                       request.resource.data.email == request.auth.token.email;
 
-      // Allow read: User can read their own profile.
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+      // Allow read, update: User can read/update their own profile.
+      // Disallow role changes by the user themselves via update.
+      allow read: if isOwner(userId);
+      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role; // Prevent role change
 
-      // Allow update: User can update their own profile.
-      // (Does not prevent role change by user themselves in this version for simplicity, can be added)
-      allow update: if isAuthenticated() && request.auth.uid == userId;
-
-      // Disallow delete for now.
-      allow delete: if false;
+      allow delete: if false; // Generally, disallow delete for user profiles
     }
 
     // Sessions Collection
     match /sessions/{sessionId} {
-      // Helper function to get the role of the currently authenticated user
-      // Returns the role string or null if not found or no role field
-      function authedUserRole() {
-        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      // Helper: Get user's role from their profile document
+      function getUserRole() {
+        // Ensure request.auth.uid is not null before using it in a get() path
+        if (request.auth == null || request.auth.uid == null) {
+          return null;
+        }
+        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+        if (userDoc.data == null) {
+          return null;
+        }
+        return userDoc.data.role;
       }
 
-      function isAuthedUserCoach() {
-        return authedUserRole() == 'coach';
+      function isSessionCoach() {
+        return getUserRole() == 'coach' && resource.data.coachId == request.auth.uid;
+      }
+      function isSessionClient() {
+        return getUserRole() == 'client' && resource.data.clientId == request.auth.uid;
+      }
+      function isAdmin() {
+        return getUserRole() == 'admin';
       }
 
-      function isAuthedUserClient() {
-        return authedUserRole() == 'client';
-      }
-
-      function isAuthedUserAdmin() {
-        return authedUserRole() == 'admin';
-      }
-
-      // Check if the authenticated user is the coach assigned to THIS session (for read/update of existing doc)
-      function isCoachOfThisSession() {
-        // resource.data refers to the existing document in Firestore
-        return isAuthedUserCoach() && resource.data.coachId == request.auth.uid;
-      }
-
-      // Check if the authenticated user is the client assigned to THIS session (for read/update of existing doc)
-      function isClientOfThisSession() {
-        // resource.data refers to the existing document in Firestore
-        return isAuthedUserClient() && resource.data.clientId == request.auth.uid;
-      }
-
-      // Allow create:
-      // - Authenticated coach can create a session.
-      // - coachId in the new sessionData (request.resource.data) must match the authenticated coach's UID.
-      allow create: if isAuthenticated() &&
-                       isAuthedUserCoach() &&
-                       request.resource.data.coachId == request.auth.uid;
-
-      // Allow read:
-      // - Admin can read all sessions.
-      // - Coach can read sessions they created (coachId in doc matches their uid).
-      // - Client can read sessions where they are the client (clientId in doc matches their uid).
-      allow read: if isAuthenticated() &&
-                     (isAuthedUserAdmin() || isCoachOfThisSession() || isClientOfThisSession());
-
-      // Allow update:
-      // - Admin can update sessions.
-      // - Coach can update sessions they created, e.g., if status is 'Logged'.
-      allow update: if isAuthenticated() &&
-                       (
-                         isAuthedUserAdmin() ||
-                         (isCoachOfThisSession() && resource.data.status == 'Logged')
-                       );
-      // Allow delete:
-      // - Admin can delete.
-      allow delete: if isAuthenticated() && isAuthedUserAdmin();
+      allow create: if isAuthenticated() && getUserRole() == 'coach' && request.resource.data.coachId == request.auth.uid;
+      allow read: if isAuthenticated() && (isAdmin() || isSessionCoach() || isSessionClient());
+      allow update: if isAuthenticated() && (
+                    isAdmin() ||
+                    (isSessionCoach() && resource.data.status == 'Logged')
+                  );
+      allow delete: if isAuthenticated() && isAdmin();
     }
   }
 }
