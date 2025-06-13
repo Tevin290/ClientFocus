@@ -6,49 +6,48 @@ import { PageHeader } from "@/components/shared/page-header";
 import { SessionCard, type Session } from "@/components/shared/session-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { History, Loader2 } from "lucide-react";
-import { useRole } from '@/context/role-context'; // To get current user for fetching data
-import { getClientSessions } from '@/lib/firestoreService'; // Import the service
+import { useRole } from '@/context/role-context';
+import { getClientSessions } from '@/lib/firestoreService';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function ClientHistoryPage() {
-  const { role, user } = useRole(); // Assuming useRole context might provide the authenticated user object
+  const { role, user, isLoading: isRoleLoading } = useRole();
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
   useEffect(() => {
-    if (role === 'client' && user?.uid) { // Ensure user is a client and UID is available
+    setFirebaseAvailable(isFirebaseConfigured());
+  }, []);
+
+  useEffect(() => {
+    if (isRoleLoading || !firebaseAvailable) {
+      // Wait for role context to load or if Firebase is not configured
+      if (!isRoleLoading && !firebaseAvailable) setIsLoadingSessions(false); // Stop loading if FB not configured
+      return;
+    }
+
+    if (role === 'client' && user?.uid) {
       const fetchSessions = async () => {
-        setIsLoading(true);
+        setIsLoadingSessions(true);
         try {
-          // Replace with actual Firebase user ID from auth context
-          // For now, using a placeholder or assuming user.uid exists from context
           const fetchedSessions = await getClientSessions(user.uid); 
           setSessions(fetchedSessions);
         } catch (error) {
           console.error("Failed to fetch client sessions:", error);
           // Handle error (e.g., show toast)
         } finally {
-          setIsLoading(false);
+          setIsLoadingSessions(false);
         }
       };
       fetchSessions();
-    } else if (role !== 'client') {
-      // Handle cases where a non-client tries to access this page, or user is not available
-      setIsLoading(false);
-      setSessions([]); // Clear sessions if not applicable
     } else {
-        // If user.uid is not yet available but role is client, keep loading or use mock
-        // For demonstration, falling back to mock if user.uid isn't ready
-        // In a real app, you'd ensure user object is loaded from context before fetching
-        const loadMock = async () => {
-             const mockData = await getClientSessions("mock-client-id"); // fallback
-             setSessions(mockData);
-             setIsLoading(false);
-        }
-        loadMock();
+      setIsLoadingSessions(false);
+      setSessions([]); // Clear sessions if not applicable
     }
-  }, [role, user]); // Add user to dependency array
+  }, [role, user, isRoleLoading, firebaseAvailable]);
 
-  if (isLoading) {
+  if (isLoadingSessions || isRoleLoading) {
     return (
       <div>
         <PageHeader title="My Session History" description="Review your past coaching sessions, notes, and recordings." />
@@ -56,6 +55,21 @@ export default function ClientHistoryPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="ml-2">Loading your sessions...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!firebaseAvailable) {
+     return (
+      <div>
+        <PageHeader title="My Session History" description="Review your past coaching sessions, notes, and recordings." />
+        <Alert variant="destructive" className="shadow-light">
+          <History className="h-5 w-5" />
+          <AlertTitle className="font-headline">Feature Unavailable</AlertTitle>
+          <AlertDescription>
+            Firebase is not configured. Session history cannot be loaded. Please contact support or the administrator.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

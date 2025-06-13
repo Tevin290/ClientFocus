@@ -1,66 +1,29 @@
 
-'use server'; // Or remove if you intend to use this on client heavily with client-side SDK
+'use server';
 
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from './firebase'; // Ensure db is properly initialized and exported from firebase.ts
-import type { Session } from '@/components/shared/session-card'; // Assuming Session type is defined here
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc, writeBatch, Timestamp, setDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
-// Define a more complete User type based on your Firestore structure
 export interface UserProfile {
   uid: string;
-  email: string | null;
-  displayName: string | null;
+  email: string; // Made non-null for core functionality
+  displayName: string; // Made non-null
   role: UserRole;
   photoURL?: string;
-  createdAt?: any; // Firestore Timestamp
-  coachId?: string;
+  createdAt: Timestamp; // Firestore Timestamp
+  coachId?: string; // For client roles
   stripeCustomerId?: string;
 }
 
-
-// --- User Management ---
-
-export async function getUserProfile(uid: string): Promise<UserProfile | null> {
-  try {
-    const userDocRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userDocRef);
-    if (userSnap.exists()) {
-      return { uid, ...userSnap.data() } as UserProfile;
-    }
-    console.log(`No user profile found for UID: ${uid}`);
-    return null;
-  } catch (error) {
-    console.error("Error fetching user profile:", error);
-    throw error; // Re-throw or handle as needed
-  }
-}
-
-export async function createUserProfile(uid: string, data: Omit<UserProfile, 'uid' | 'createdAt'>): Promise<void> {
-  try {
-    const userDocRef = doc(db, 'users', uid);
-    await addDoc(collection(db, 'users'), { // Using addDoc will auto-generate an ID, consider setDoc with uid
-      ...data,
-      uid, // ensure uid is part of the document data
-      createdAt: serverTimestamp(),
-    });
-  } catch (error) {
-    console.error("Error creating user profile:", error);
-    throw error;
-  }
-}
-
-
-// --- Session Management ---
-
-// This is a more specific type for data being sent to Firestore for a new session
 export interface NewSessionData {
   coachId: string;
   coachName: string;
   clientId: string;
   clientName: string;
   clientEmail: string;
-  sessionDate: Date; // Use JS Date for input, convert to Timestamp for Firestore
+  sessionDate: Date; // JS Date for input, convert to Timestamp for Firestore
   sessionType: 'Full' | 'Half';
   videoLink?: string;
   sessionNotes: string;
@@ -68,12 +31,66 @@ export interface NewSessionData {
   status: 'Logged' | 'Reviewed' | 'Billed';
 }
 
+// --- User Management ---
+
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  if (!db) {
+    console.error("Firestore DB is not initialized in getUserProfile.");
+    throw new Error("Firestore not available");
+  }
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      // Ensure role is a valid UserRole
+      const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
+      return { 
+        uid, 
+        email: data.email,
+        displayName: data.displayName,
+        role,
+        photoURL: data.photoURL,
+        createdAt: data.createdAt, // This will be a Firestore Timestamp
+        coachId: data.coachId,
+        stripeCustomerId: data.stripeCustomerId,
+      } as UserProfile;
+    }
+    console.log(`No user profile found for UID: ${uid}`);
+    return null;
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    throw error;
+  }
+}
+
+// Used by dummy data generation, ensure uid is passed and data matches UserProfile structure
+export async function createUserProfileInFirestore(uid: string, profileData: Omit<UserProfile, 'uid' | 'createdAt'> & {createdAt?: any}): Promise<void> {
+  if (!db) {
+    console.error("Firestore DB is not initialized in createUserProfileInFirestore.");
+    throw new Error("Firestore not available");
+  }
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    await setDoc(userDocRef, {
+      ...profileData,
+      uid, // ensure uid is part of the document data
+      createdAt: profileData.createdAt || serverTimestamp(),
+    });
+    console.log(`User profile created/updated in Firestore for UID: ${uid}`);
+  } catch (error) {
+    console.error("Error creating/updating user profile in Firestore:", error);
+    throw error;
+  }
+}
+
+// --- Session Management ---
 
 export async function getClientSessions(clientId: string): Promise<Session[]> {
-  // This is a placeholder. In a real app, you'd fetch this from Firestore.
-  console.log(`Fetching sessions for client ID (placeholder): ${clientId}`);
-  // Example Firestore query (uncomment and adapt when Firebase is fully set up)
-  /*
+  if (!db) {
+    console.error("Firestore DB is not initialized in getClientSessions.");
+    return []; // Or throw error
+  }
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(
@@ -82,43 +99,41 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
       orderBy('sessionDate', 'desc')
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      sessionDate: doc.data().sessionDate.toDate().toISOString(), // Convert Timestamp to string
-    })) as Session[];
+    if (snapshot.empty) {
+        console.log(`No sessions found for client ID: ${clientId}`);
+        return [];
+    }
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(), // Convert Timestamp to string
+      } as Session;
+    });
   } catch (error) {
     console.error("Error fetching client sessions:", error);
-    return [];
+    // Return mock data or rethrow, for now, returning empty to avoid breaking UI on error
+     return [ /*
+        {
+          id: 'mock_c1',
+          coachName: 'Dr. John Doe (Mock)',
+          clientName: 'Current Client (Mock)',
+          sessionDate: new Date('2024-07-15').toISOString(),
+          sessionType: 'Full',
+          summary: 'Client History (Mock): Discussed project milestones.',
+          videoLink: 'https://example.com/recording_mock1',
+          status: 'Logged',
+        }, */
+      ];
   }
-  */
-
-  // Mock data as before:
-  const mockClientSessions: Session[] = [
-    {
-      id: 'c1',
-      coachName: 'Dr. John Doe',
-      sessionDate: '2024-07-15',
-      sessionType: 'Full',
-      summary: 'Client History: Discussed project milestones and brainstormed strategies. Key actions: A, B, C.',
-      videoLink: 'https://example.com/recording1',
-    },
-    {
-      id: 'c2',
-      coachName: 'Jane Smith',
-      sessionDate: '2024-06-20',
-      sessionType: 'Half',
-      summary: 'Client History: Quick check-in on time management. Reviewed weekly planner.',
-    },
-  ];
-  return Promise.resolve(mockClientSessions.map(s => ({...s, clientName: 'Current Client'})));
 }
 
-
 export async function getCoachSessions(coachId: string): Promise<Session[]> {
-  console.log(`Fetching sessions for coach ID (placeholder): ${coachId}`);
-  // Example Firestore query (uncomment and adapt)
-  /*
+  if (!db) {
+    console.error("Firestore DB is not initialized in getCoachSessions.");
+    return [];
+  }
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(
@@ -127,91 +142,114 @@ export async function getCoachSessions(coachId: string): Promise<Session[]> {
       orderBy('sessionDate', 'desc')
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      sessionDate: doc.data().sessionDate.toDate().toISOString(),
-    })) as Session[];
+    if (snapshot.empty) {
+        console.log(`No sessions found for coach ID: ${coachId}`);
+        return [];
+    }
+    return snapshot.docs.map(docData => {
+      const data = docData.data();
+      return {
+        id: docData.id,
+        ...data,
+        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
+      } as Session;
+    });
   } catch (error) {
     console.error("Error fetching coach sessions:", error);
-    return [];
+    return []; // Fallback or rethrow
   }
-  */
-  // Mock data:
-  const mockCoachSessions: Array<Session & { clientId: string }> = [
-    {
-      id: 'coach_s1',
-      clientId: 'client_1',
-      clientName: 'Alice Wonderland',
-      sessionDate: '2024-07-20',
-      sessionType: 'Full',
-      summary: 'Focused on goal setting and weekly planning. Alice is making good progress.',
-      videoLink: 'https://example.com/recording_coach_alice',
-      status: 'Logged',
-    },
-  ];
-  return Promise.resolve(mockCoachSessions);
 }
 
+
 export async function logSession(sessionData: NewSessionData): Promise<string> {
-  console.log('Logging session (placeholder):', sessionData);
-  // Example Firestore add (uncomment and adapt)
-  /*
+   if (!db) {
+    console.error("Firestore DB is not initialized in logSession.");
+    throw new Error("Firestore not available");
+  }
   try {
     const sessionsCol = collection(db, 'sessions');
     const docRef = await addDoc(sessionsCol, {
       ...sessionData,
-      sessionDate: sessionData.sessionDate, // Firestore will convert JS Date to Timestamp
+      sessionDate: Timestamp.fromDate(new Date(sessionData.sessionDate)), // Convert JS Date to Firestore Timestamp
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    console.log(`Session logged with ID: ${docRef.id}`);
     return docRef.id;
   } catch (error) {
     console.error("Error logging session:", error);
     throw error;
   }
-  */
-  return Promise.resolve(`mock_session_id_${Date.now()}`); // Return a mock ID
 }
 
 export async function getSessionById(sessionId: string): Promise<Session | null> {
-  console.log(`Fetching session by ID (placeholder): ${sessionId}`);
-  // Example Firestore query (uncomment and adapt)
-  /*
+   if (!db) {
+    console.error("Firestore DB is not initialized in getSessionById.");
+    return null;
+  }
   try {
     const sessionDocRef = doc(db, 'sessions', sessionId);
     const sessionSnap = await getDoc(sessionDocRef);
     if (sessionSnap.exists()) {
+      const data = sessionSnap.data();
       return {
         id: sessionSnap.id,
-        ...sessionSnap.data(),
-        sessionDate: sessionSnap.data().sessionDate.toDate().toISOString(),
+        ...data,
+        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     }
+    console.log(`No session found with ID: ${sessionId}`);
     return null;
   } catch (error) {
     console.error("Error fetching session by ID:", error);
-    return null;
+    return null; // Or rethrow
   }
-  */
-  return Promise.resolve(null);
 }
 
-export async function updateSession(sessionId: string, updates: Partial<Session>): Promise<void> {
-  console.log(`Updating session (placeholder) ${sessionId}:`, updates);
-  // Example Firestore update (uncomment and adapt)
-  /*
+export async function updateSession(sessionId: string, updates: Partial<Omit<Session, 'id' | 'sessionDate'> & { sessionDate?: string | Date }>): Promise<void> {
+   if (!db) {
+    console.error("Firestore DB is not initialized in updateSession.");
+    throw new Error("Firestore not available");
+  }
   try {
     const sessionDocRef = doc(db, 'sessions', sessionId);
-    await updateDoc(sessionDocRef, {
-      ...updates,
-      sessionDate: updates.sessionDate ? new Date(updates.sessionDate) : undefined, // Convert back to Date if updating
-      updatedAt: serverTimestamp(),
-    });
+    const updateData: any = { ...updates, updatedAt: serverTimestamp() };
+
+    if (updates.sessionDate) {
+      updateData.sessionDate = Timestamp.fromDate(new Date(updates.sessionDate));
+    }
+    
+    await updateDoc(sessionDocRef, updateData);
+    console.log(`Session updated: ${sessionId}`);
   } catch (error) {
     console.error("Error updating session:", error);
     throw error;
   }
-  */
-  return Promise.resolve();
+}
+
+export async function getAllSessionsForAdmin(): Promise<Session[]> {
+  if (!db) {
+    console.error("Firestore DB is not initialized in getAllSessionsForAdmin.");
+    return [];
+  }
+  try {
+    const sessionsCol = collection(db, 'sessions');
+    const q = query(sessionsCol, orderBy('sessionDate', 'desc'));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      console.log("No sessions found for admin.");
+      return [];
+    }
+    return snapshot.docs.map(docData => {
+      const data = docData.data();
+      return {
+        id: docData.id,
+        ...data,
+        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
+      } as Session;
+    });
+  } catch (error) {
+    console.error("Error fetching all sessions for admin:", error);
+    return [];
+  }
 }

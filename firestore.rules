@@ -1,0 +1,56 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to get user's role
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    // Users Collection
+    // - Users can read and update their own profile.
+    // - Authenticated users can create their own profile (e.g., during signup).
+    // - Admins can read/write any user profile.
+    match /users/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId; // Or more restrictive if profile creation is server-side
+      
+      // Admin access (ensure admin user exists with this role in their user document)
+      allow read, write: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Sessions Collection
+    // - Clients can read sessions where they are the clientId.
+    // - Coaches can read sessions where they are the coachId.
+    // - Coaches can create sessions where they are the coachId.
+    // - Coaches can update sessions they created (e.g., status, notes).
+    // - Admins can read/write any session.
+    match /sessions/{sessionId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.coachId ||
+        getUserRole(request.auth.uid) == 'admin'
+      );
+      
+      allow create: if request.auth != null && 
+                       request.resource.data.coachId == request.auth.uid &&
+                       (getUserRole(request.auth.uid) == 'coach' || getUserRole(request.auth.uid) == 'admin');
+                       // Ensure coachId in new session matches authenticated user's ID
+
+      allow update: if request.auth != null && (
+        (request.auth.uid == resource.data.coachId && getUserRole(request.auth.uid) == 'coach') || // Coach can update their sessions
+        getUserRole(request.auth.uid) == 'admin' // Admin can update any session
+      );
+
+      // Delete might be admin-only or restricted
+      allow delete: if request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Deny all other access by default if no rules match
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

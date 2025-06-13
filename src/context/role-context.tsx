@@ -3,13 +3,15 @@
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-// import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth'; // Step 1: Import
-// import { auth } from '@/lib/firebase'; // Step 1: Import
-// import { getUserProfile, type UserProfile } from '@/lib/firestoreService'; // Step 1: Import
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { getUserProfile, type UserProfile } from '@/lib/firestoreService';
+import { useRouter, usePathname } from 'next/navigation';
+
 
 export type UserRole = 'admin' | 'coach' | 'client' | null;
 
-// Extend to include the full Firebase user and custom profile
+// This will now primarily hold the Firebase User object
 interface AuthUser {
   uid: string;
   email: string | null;
@@ -19,91 +21,87 @@ interface AuthUser {
 
 interface RoleContextType {
   user: AuthUser | null; // Firebase authenticated user
-  userProfile: any | null; // Your custom user profile from Firestore
+  userProfile: UserProfile | null; // Your custom user profile from Firestore
   role: UserRole;
-  setRole: (role: UserRole) => void; // This might be deprecated if role comes from userProfile
+  // setRole: (role: UserRole) => void; // This will be mostly managed by auth state
   isLoading: boolean;
+  logout: () => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export const RoleProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [userProfile, setUserProfile] = useState<any | null>(null);
-  const [role, setRoleState] = useState<UserRole>(null); // Kept for now, might be derived
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [role, setRoleState] = useState<UserRole>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    // Step 2: Listen for Firebase Auth state changes
-    // const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-    //   if (firebaseUser) {
-    //     setUser({
-    //       uid: firebaseUser.uid,
-    //       email: firebaseUser.email,
-    //       displayName: firebaseUser.displayName,
-    //     });
-    //     // Fetch user profile from Firestore to get the role
-    //     const profile = await getUserProfile(firebaseUser.uid);
-    //     if (profile) {
-    //       setUserProfile(profile);
-    //       setRoleState(profile.role); // Set role from Firestore profile
-    //       // No longer need to use localStorage for role if fetched from Firestore
-    //     } else {
-    //       // Handle case where user is authenticated but no profile exists
-    //       // Maybe redirect to a profile creation page or set a default/guest role
-    //       setRoleState(null); 
-    //       setUserProfile(null);
-    //     }
-    //   } else {
-    //     setUser(null);
-    //     setUserProfile(null);
-    //     setRoleState(null); // Clear role on logout
-    //     localStorage.removeItem('userRole'); // Clear legacy role
-    //   }
-    //   setIsLoading(false);
-    // });
-    // return () => unsubscribe(); // Cleanup subscription
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      setIsLoading(true);
+      if (firebaseUser) {
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+        });
+        
+        try {
+          const profile = await getUserProfile(firebaseUser.uid);
+          if (profile) {
+            setUserProfile(profile);
+            setRoleState(profile.role);
+            console.log("User authenticated, role set from Firestore:", profile.role);
+            if (pathname === '/login' && profile.role) {
+              router.push(`/${profile.role}/dashboard`);
+            }
+          } else {
+            // This case might happen if a user exists in Firebase Auth but not in Firestore `users` collection.
+            // This could be an error state or a new user who needs a profile created.
+            console.warn(`User ${firebaseUser.uid} authenticated but no Firestore profile found.`);
+            setUserProfile(null);
+            setRoleState(null);
+            // Potentially log them out or redirect to a profile setup page
+             if (pathname !== '/login') router.push('/login'); // Redirect to login if no profile
+          }
+        } catch (error) {
+            console.error("Error fetching user profile during auth state change:", error);
+            setUserProfile(null);
+            setRoleState(null);
+            // Potentially log them out
+            if (pathname !== '/login') router.push('/login');
+        }
 
-    // Fallback to localStorage if Firebase Auth is not yet integrated for role
-    // This part should eventually be replaced by the Firebase Auth logic above
-    try {
-      const storedRole = localStorage.getItem('userRole') as UserRole;
-      if (storedRole) {
-        setRoleState(storedRole);
-        // Simulate a user object if role exists for pages expecting user.uid
-        if (!user && storedRole) {
-             setUser({uid: `mock-${storedRole}-id`, email: `${storedRole}@example.com`, displayName: `${storedRole.charAt(0).toUpperCase() + storedRole.slice(1)} User`});
+      } else { // User is logged out
+        setUser(null);
+        setUserProfile(null);
+        setRoleState(null);
+        console.log("User logged out or not authenticated.");
+        if (pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) { // Allow success page access without immediate redirect
+            router.push('/login');
         }
       }
-    } catch (error) {
-      console.error("Failed to access localStorage:", error);
-    } finally {
-      setIsLoading(false); // Ensure loading is set to false after trying localStorage
-    }
-  }, []); // Empty dependency array means this runs once on mount
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, [router, pathname]); // Added router and pathname to dependencies
 
-  // This setRole might become less relevant if role is strictly derived from Firestore.
-  // Or, it could be used by an admin to change another user's role.
-  const setRole = (newRole: UserRole) => {
-    setRoleState(newRole);
-    // If still using localStorage as a temporary measure:
-    if (newRole) {
-      try {
-        localStorage.setItem('userRole', newRole);
-      } catch (error) {
-        console.error("Failed to access localStorage:", error);
-      }
-    } else {
-      try {
-        localStorage.removeItem('userRole');
-      } catch (error) {
-        console.error("Failed to access localStorage:", error);
-      }
+  const logout = async () => {
+    try {
+      await auth.signOut();
+      // onAuthStateChanged will handle clearing user, userProfile, and role states
+      // and redirecting to login.
+    } catch (error) {
+      console.error("Error signing out: ", error);
+      // Handle logout error (e.g., show a toast)
     }
   };
 
+
   return (
-    <RoleContext.Provider value={{ user, userProfile, role, setRole, isLoading }}>
+    <RoleContext.Provider value={{ user, userProfile, role, isLoading, logout }}>
       {children}
     </RoleContext.Provider>
   );

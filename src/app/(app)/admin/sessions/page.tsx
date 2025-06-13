@@ -1,10 +1,11 @@
+
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, DollarSign, Eye, Video, FileText } from "lucide-react";
+import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -15,54 +16,71 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
+import { getAllSessionsForAdmin, updateSession, type Session } from '@/lib/firestoreService'; // Import real service
+import { useRole } from '@/context/role-context';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 type SessionStatus = 'Logged' | 'Reviewed' | 'Billed';
-interface Session {
-  id: string;
-  clientName: string;
-  coachName: string;
-  sessionDate: string;
-  sessionType: 'Full' | 'Half';
-  status: SessionStatus;
-  notesSummary: string;
-  videoLink?: string;
-}
-
-const mockSessions: Session[] = [
-  { id: '1', clientName: 'Alice Wonderland', coachName: 'Dr. John Doe', sessionDate: '2024-07-15', sessionType: 'Full', status: 'Logged', notesSummary: 'Discussed progress on goals A and B. New strategies for C.', videoLink: 'https://example.com/video1' },
-  { id: '2', clientName: 'Bob The Builder', coachName: 'Jane Smith', sessionDate: '2024-07-16', sessionType: 'Half', status: 'Reviewed', notesSummary: 'Focused on time management techniques.', videoLink: 'https://example.com/video2' },
-  { id: '3', clientName: 'Charlie Brown', coachName: 'Dr. John Doe', sessionDate: '2024-07-17', sessionType: 'Full', status: 'Billed', notesSummary: 'Reviewed Q2 objectives and set Q3 targets.', videoLink: 'https://example.com/video3' },
-  { id: '4', clientName: 'Diana Prince', coachName: 'Dr. Eva Green', sessionDate: '2024-07-18', sessionType: 'Full', status: 'Logged', notesSummary: 'Explored leadership challenges and communication styles.', videoLink: 'https://example.com/video4' },
-];
-
+// Session type is already imported from firestoreService
 
 export default function AdminSessionReviewPage() {
   const { toast } = useToast();
-  const [sessions, setSessions] = useState<Session[]>(mockSessions);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { role, isLoading: isRoleLoading } = useRole();
+  const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
-  const handleInitiateBilling = (sessionId: string) => {
-    setSessions(prevSessions => 
-      prevSessions.map(session => 
-        session.id === sessionId ? { ...session, status: 'Billed' } : session
-      )
-    );
-    toast({
-      title: "Billing Initiated",
-      description: `Billing process started for session ${sessionId}.`,
-      variant: "default", // or custom success variant
-    });
-  };
+  useEffect(() => {
+    setFirebaseAvailable(isFirebaseConfigured());
+  }, []);
 
-  const handleMarkAsReviewed = (sessionId: string) => {
-    setSessions(prevSessions => 
-      prevSessions.map(session => 
-        session.id === sessionId ? { ...session, status: 'Reviewed' } : session
-      )
-    );
-    toast({
-      title: "Session Reviewed",
-      description: `Session ${sessionId} marked as reviewed.`,
-    });
+  useEffect(() => {
+    if (isRoleLoading || !firebaseAvailable) {
+      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+      return;
+    }
+
+    if (role === 'admin') {
+      const fetchSessions = async () => {
+        setIsLoading(true);
+        try {
+          const fetchedSessions = await getAllSessionsForAdmin();
+          setSessions(fetchedSessions);
+        } catch (error) {
+          console.error("Failed to fetch sessions for admin:", error);
+          toast({ title: "Error", description: "Could not load sessions.", variant: "destructive" });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchSessions();
+    } else {
+        setSessions([]);
+        setIsLoading(false);
+    }
+  }, [role, isRoleLoading, toast, firebaseAvailable]);
+
+  const handleUpdateStatus = async (sessionId: string, newStatus: SessionStatus) => {
+    if (!firebaseAvailable) {
+      toast({ title: "Operation Failed", description: "Firebase is not configured.", variant: "destructive" });
+      return;
+    }
+    try {
+      await updateSession(sessionId, { status: newStatus });
+      setSessions(prevSessions => 
+        prevSessions.map(session => 
+          session.id === sessionId ? { ...session, status: newStatus } : session
+        )
+      );
+      toast({
+        title: `Session ${newStatus}`,
+        description: `Session ${sessionId} has been marked as ${newStatus.toLowerCase()}.`,
+        variant: newStatus === 'Billed' ? "default" : undefined, // 'default' for success, undefined for others
+      });
+    } catch (error) {
+      console.error(`Error updating session ${sessionId} to ${newStatus}:`, error);
+      toast({ title: "Update Failed", description: "Could not update session status.", variant: "destructive" });
+    }
   };
   
   const getStatusBadge = (status: SessionStatus) => {
@@ -78,6 +96,46 @@ export default function AdminSessionReviewPage() {
     }
   };
 
+  if (isLoading || isRoleLoading) {
+    return (
+      <div>
+        <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-2">Loading sessions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (role !== 'admin') {
+     return (
+      <div>
+        <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+        <Alert variant="destructive">
+            <TriangleAlert className="h-4 w-4" />
+            <AlertTitle>Access Denied</AlertTitle>
+            <AlertDescription>You must be an admin to view this page.</AlertDescription>
+        </Alert>
+      </div>
+     );
+  }
+
+  if (!firebaseAvailable) {
+     return (
+      <div>
+        <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+        <Alert variant="destructive" className="shadow-light">
+          <TriangleAlert className="h-5 w-5" />
+          <AlertTitle className="font-headline">Feature Unavailable</AlertTitle>
+          <AlertDescription>
+            Firebase is not configured. Session data cannot be loaded. Please contact support or the administrator.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
 
   return (
     <div>
@@ -88,51 +146,55 @@ export default function AdminSessionReviewPage() {
           <CardDescription>Awaiting review or billing.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Coach</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessions.map((session) => (
-                <TableRow key={session.id}>
-                  <TableCell className="font-medium">{session.clientName}</TableCell>
-                  <TableCell>{session.coachName}</TableCell>
-                  <TableCell>{new Date(session.sessionDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{session.sessionType}</TableCell>
-                  <TableCell>{getStatusBadge(session.status)}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    {session.videoLink && (
-                      <Button variant="outline" size="sm" asChild className="hover:border-primary">
-                        <a href={session.videoLink} target="_blank" rel="noopener noreferrer" aria-label="View Video">
-                          <Video className="h-4 w-4" />
-                        </a>
-                      </Button>
-                    )}
-                     <Button variant="outline" size="sm" onClick={() => alert(`Notes for ${session.clientName}:\n${session.notesSummary}`)} className="hover:border-primary" aria-label="View Notes">
-                       <FileText className="h-4 w-4" />
-                     </Button>
-                    {session.status === 'Logged' && (
-                      <Button variant="outline" size="sm" onClick={() => handleMarkAsReviewed(session.id)} className="hover:border-primary">
-                        <Eye className="mr-1 h-4 w-4" /> Review
-                      </Button>
-                    )}
-                    {session.status === 'Reviewed' && (
-                      <Button variant="default" size="sm" onClick={() => handleInitiateBilling(session.id)} className="bg-success hover:bg-success/90 text-success-foreground">
-                        <DollarSign className="mr-1 h-4 w-4" /> Bill
-                      </Button>
-                    )}
-                  </TableCell>
+          {sessions.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No sessions found.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Coach</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session) => (
+                  <TableRow key={session.id}>
+                    <TableCell className="font-medium">{session.clientName}</TableCell>
+                    <TableCell>{session.coachName}</TableCell>
+                    <TableCell>{new Date(session.sessionDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{session.sessionType}</TableCell>
+                    <TableCell>{getStatusBadge(session.status as SessionStatus)}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      {session.videoLink && (
+                        <Button variant="outline" size="sm" asChild className="hover:border-primary">
+                          <a href={session.videoLink} target="_blank" rel="noopener noreferrer" aria-label="View Video">
+                            <Video className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => alert(`Notes for ${session.clientName}:\n${session.notes || session.summary || 'No notes available.'}`)} className="hover:border-primary" aria-label="View Notes">
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                      {session.status === 'Logged' && (
+                        <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Reviewed')} className="hover:border-primary">
+                          <Eye className="mr-1 h-4 w-4" /> Review
+                        </Button>
+                      )}
+                      {session.status === 'Reviewed' && (
+                        <Button variant="default" size="sm" onClick={() => handleUpdateStatus(session.id, 'Billed')} className="bg-success hover:bg-success/90 text-success-foreground">
+                          <DollarSign className="mr-1 h-4 w-4" /> Bill
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
          <CardFooter>
             <p className="text-xs text-muted-foreground">

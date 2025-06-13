@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -10,16 +11,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
 import { Bot, Save, Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
+import { logSession, type NewSessionData } from '@/lib/firestoreService'; // Import logSession and NewSessionData
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 const sessionLogSchema = z.object({
+  clientId: z.string().min(1, 'Client ID is required (usually auto-filled or selected)').optional(), // Will make required if not auto-filled
   clientName: z.string().min(1, 'Client Name is required'),
   clientEmail: z.string().email('Invalid email address').min(1, 'Client Email is required'),
-  sessionDate: z.string().min(1, "Session date is required"), // Consider using a date picker if desired
+  sessionDate: z.string().min(1, "Session date is required"),
   videoLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   sessionType: z.enum(['Full', 'Half'], { required_error: 'Session Type is required' }),
   sessionNotes: z.string().min(10, 'Session notes must be at least 10 characters').max(5000, 'Session notes cannot exceed 5000 characters'),
@@ -28,19 +31,32 @@ const sessionLogSchema = z.object({
 
 type SessionLogFormValues = z.infer<typeof sessionLogSchema>;
 
-export function SessionLogForm() {
+interface SessionLogFormProps {
+  coachId: string;
+  coachName: string;
+}
+
+export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams(); // For getting clientId from URL if navigating from client's page
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isSubmittingReal, setIsSubmittingReal] = useState(false);
+  const [firebaseAvailable, setFirebaseAvailable] = useState(isFirebaseConfigured());
+
+  const prefilledClientId = searchParams.get('clientId');
+  const prefilledClientName = searchParams.get('clientName');
+
 
   const form = useForm<SessionLogFormValues>({
     resolver: zodResolver(sessionLogSchema),
     defaultValues: {
-      clientName: '',
+      clientId: prefilledClientId || '', // Set if available
+      clientName: prefilledClientName || '',
       clientEmail: '',
-      sessionDate: new Date().toISOString().split('T')[0], // Default to today
+      sessionDate: new Date().toISOString().split('T')[0],
       videoLink: '',
-      sessionType: undefined, // Let placeholder show
+      sessionType: undefined,
       sessionNotes: '',
       summary: '',
     },
@@ -74,34 +90,79 @@ export function SessionLogForm() {
     }
   };
 
-  const onSubmit: SubmitHandler<SessionLogFormValues> = (data) => {
-    console.log('Session Log Data:', data);
-    // Here you would typically send data to your backend
-    // For now, we simulate success and navigate
-    
-    // You can still show a toast if you like, or rely on the success page
-    // toast({
-    //   title: 'Session Logged',
-    //   description: `Session for ${data.clientName} has been successfully logged.`,
-    // });
+  const onSubmit: SubmitHandler<SessionLogFormValues> = async (data) => {
+    if (!firebaseAvailable) {
+      toast({ title: "Operation Failed", description: "Firebase is not configured. Cannot log session.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingReal(true);
 
-    // Navigate to the success page
-    router.push('/coach/log-session/success');
-    // It's generally good practice to reset the form if the user might log another session from the success page.
-    // However, since the user is navigating away and might come back via "Log Another Session",
-    // the form will be fresh anyway. If we were staying on the same page, reset would be more critical.
-    // form.reset(); 
+    // TODO: In a real app, you might have a client selection dropdown if not pre-filled
+    // For now, we'll assume clientName and clientEmail are sufficient to identify or create a client record if needed.
+    // If clientId is missing, you might want to query Firestore for a client by email or handle it.
+    // For this example, if clientId is missing from URL, it's an issue.
+    // However, the schema allows it to be optional for now. Ideally, it's always present.
+
+    const sessionDataToLog: NewSessionData = {
+      coachId,
+      coachName,
+      // For clientId, if you have a client selection mechanism, use that.
+      // If navigating from "Log session for Client X", then clientId would be pre-filled.
+      // For now, if not prefilled, it's an issue. We should enforce it or have a client lookup.
+      // This is a simplified example.
+      clientId: data.clientId || `unknown_client_${Date.now()}`, // Fallback, not ideal for real app
+      clientName: data.clientName,
+      clientEmail: data.clientEmail,
+      sessionDate: new Date(data.sessionDate),
+      sessionType: data.sessionType,
+      videoLink: data.videoLink || undefined,
+      sessionNotes: data.sessionNotes,
+      summary: data.summary || undefined,
+      status: 'Logged',
+    };
+
+    try {
+      await logSession(sessionDataToLog);
+      toast({
+        title: 'Session Logged!',
+        description: `Session for ${data.clientName} has been recorded.`,
+      });
+      router.push('/coach/log-session/success');
+    } catch (error) {
+      console.error('Error logging session to Firestore:', error);
+      toast({
+        title: 'Logging Failed',
+        description: 'Could not save session to database. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmittingReal(false);
+    }
   };
 
   return (
     <Card className="w-full max-w-2xl shadow-light">
       <CardHeader>
         <CardTitle className="font-headline">Log New Coaching Session</CardTitle>
-        <CardDescription>Fill in the details for your recent coaching session.</CardDescription>
+        <CardDescription>Fill in the details for your recent coaching session. Logged by: {coachName}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
+            {/* Client ID field - can be hidden if always prefilled or handled differently */}
+            {/* 
+            <FormField
+              control={form.control}
+              name="clientId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client ID (Auto-filled if available)</FormLabel>
+                  <FormControl><Input placeholder="Client's unique ID" {...field} readOnly={!!prefilledClientId} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            */}
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -109,7 +170,7 @@ export function SessionLogForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client Full Name</FormLabel>
-                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} /></FormControl>
+                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} readOnly={!!prefilledClientName} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -187,8 +248,8 @@ export function SessionLogForm() {
 
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <Label htmlFor="summary">AI Generated Summary</Label>
-                <Button type="button" variant="outline" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing} className="hover:border-primary">
+                <FormLabel htmlFor="summary">AI Generated Summary</FormLabel> {/* Changed from Label to FormLabel */}
+                <Button type="button" variant="outline" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing || !firebaseAvailable} className="hover:border-primary">
                   {isSummarizing ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -197,14 +258,16 @@ export function SessionLogForm() {
                   Generate Summary
                 </Button>
               </div>
-              <Textarea id="summary" placeholder="Summary will appear here after generation..." {...form.register('summary')} readOnly={isSummarizing} rows={4} className="bg-muted/50" />
+              <FormControl>
+                <Textarea id="summary" placeholder="Summary will appear here after generation..." {...form.register('summary')} readOnly={isSummarizing} rows={4} className="bg-muted/50" />
+              </FormControl>
               <FormMessage>{form.formState.errors.summary?.message}</FormMessage>
             </div>
 
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full sm:w-auto" disabled={form.formState.isSubmitting || isSummarizing}>
-              <Save className="mr-2 h-4 w-4" />
+            <Button type="submit" className="w-full sm:w-auto" disabled={form.formState.isSubmitting || isSummarizing || isSubmittingReal || !firebaseAvailable}>
+              {isSubmittingReal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Log Session
             </Button>
           </CardFooter>

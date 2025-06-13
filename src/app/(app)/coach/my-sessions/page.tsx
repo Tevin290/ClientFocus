@@ -1,61 +1,105 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { SessionCard, type Session } from "@/components/shared/session-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ClipboardList, Edit3, PlusCircle } from "lucide-react"; 
+import { ClipboardList, Edit3, PlusCircle, Loader2, TriangleAlert } from "lucide-react"; 
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-
-// Mock data for coach's logged sessions, now including clientId
-const mockCoachSessions: Array<Session & { clientId: string }> = [
-  { 
-    id: 'coach_s1', 
-    clientId: 'client_1',
-    clientName: 'Alice Wonderland', 
-    sessionDate: '2024-07-20', 
-    sessionType: 'Full', 
-    summary: 'Focused on goal setting and weekly planning. Alice is making good progress towards her Q3 objectives. Key actions: Finalize project proposal, schedule stakeholder meeting.',
-    videoLink: 'https://example.com/recording_coach_alice',
-    status: 'Logged', 
-  },
-  { 
-    id: 'coach_s2', 
-    clientId: 'client_2',
-    clientName: 'Bob The Builder', 
-    sessionDate: '2024-07-18', 
-    sessionType: 'Half', 
-    summary: 'Quick check-in on project deliverables. Discussed time management for next week and Bob identified two key areas for improvement in his workflow.',
-    status: 'Logged',
-  },
-  { 
-    id: 'coach_s3', 
-    clientId: 'client_1', // Alice has another session
-    clientName: 'Alice Wonderland', 
-    sessionDate: '2024-07-10', 
-    sessionType: 'Half', 
-    summary: 'Follow-up on stakeholder meeting. Discussed feedback and next steps for proposal refinement.',
-    status: 'Logged',
-  },
-  { 
-    id: 'coach_s4', 
-    clientId: 'client_3',
-    clientName: 'Charlie Brown', 
-    sessionDate: '2024-07-15', 
-    sessionType: 'Full', 
-    summary: 'Reviewed progress on overcoming communication challenges. Role-played difficult conversations. Charlie feels more confident.',
-    videoLink: 'https://example.com/recording_coach_charlie',
-    status: 'Logged',
-  },
-];
+import { useRole } from '@/context/role-context';
+import { getCoachSessions } from '@/lib/firestoreService';
+import { useToast } from '@/hooks/use-toast';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function CoachMySessionsPage() {
+  const { role, user, isLoading: isRoleLoading } = useRole();
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const { toast } = useToast();
+  const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+
+  useEffect(() => {
+    setFirebaseAvailable(isFirebaseConfigured());
+  }, []);
+
+  useEffect(() => {
+    if (isRoleLoading || !firebaseAvailable) {
+      if (!isRoleLoading && !firebaseAvailable) setIsLoadingSessions(false);
+      return;
+    }
+
+    if (role === 'coach' && user?.uid) {
+      const fetchSessions = async () => {
+        setIsLoadingSessions(true);
+        try {
+          const fetchedSessions = await getCoachSessions(user.uid);
+          setSessions(fetchedSessions);
+        } catch (error) {
+          console.error("Failed to fetch coach sessions:", error);
+          toast({ title: "Error", description: "Could not load your sessions.", variant: "destructive" });
+        } finally {
+          setIsLoadingSessions(false);
+        }
+      };
+      fetchSessions();
+    } else {
+      setSessions([]);
+      setIsLoadingSessions(false);
+    }
+  }, [role, user, isRoleLoading, toast, firebaseAvailable]);
+
+
   const handleEditSession = (sessionId: string) => {
-    alert(`Navigating to edit session: ${sessionId}`);
+    // TODO: Implement navigation to an edit session page
+    // For now, an alert. This page would likely pre-fill the SessionLogForm with existing data.
     // router.push(`/coach/edit-session/${sessionId}`);
+    toast({
+      title: "Edit Session (Not Implemented)",
+      description: `Navigation to edit session ${sessionId} is not yet implemented.`,
+    });
   };
+
+  if (isLoadingSessions || isRoleLoading) {
+    return (
+      <div>
+        <PageHeader title="My Logged Sessions" description="Review and manage all your past coaching sessions." />
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-2">Loading your sessions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (role !== 'coach') {
+     return (
+      <div>
+        <PageHeader title="My Logged Sessions" />
+        <Alert variant="destructive">
+            <TriangleAlert className="h-4 w-4" />
+            <AlertTitle>Access Denied</AlertTitle>
+            <AlertDescription>You must be a coach to view this page.</AlertDescription>
+        </Alert>
+      </div>
+     );
+  }
+
+  if (!firebaseAvailable) {
+     return (
+      <div>
+        <PageHeader title="My Logged Sessions" description="Review and manage all your past coaching sessions." />
+        <Alert variant="destructive" className="shadow-light">
+          <TriangleAlert className="h-5 w-5" />
+          <AlertTitle className="font-headline">Feature Unavailable</AlertTitle>
+          <AlertDescription>
+            Firebase is not configured. Session data cannot be loaded.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -72,7 +116,7 @@ export default function CoachMySessionsPage() {
         }
       />
       
-      {mockCoachSessions.length === 0 ? (
+      {sessions.length === 0 ? (
         <Alert className="shadow-light">
           <ClipboardList className="h-5 w-5" />
           <AlertTitle className="font-headline">No Sessions Logged Yet!</AlertTitle>
@@ -82,7 +126,7 @@ export default function CoachMySessionsPage() {
         </Alert>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {mockCoachSessions.map((session) => (
+          {sessions.map((session) => (
             <div key={session.id} className="flex flex-col">
               <SessionCard 
                 session={session}
