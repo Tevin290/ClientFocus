@@ -49,22 +49,23 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         });
         
         try {
+          console.log(`[RoleContext] Auth state changed. User authenticated: ${firebaseUser.uid}. Fetching profile...`);
           const profile = await getUserProfile(firebaseUser.uid);
           if (profile) {
             setUserProfile(profile);
             setRoleState(profile.role);
-            console.log("User authenticated, role set from Firestore:", profile.role);
+            console.log(`[RoleContext] User profile fetched for ${firebaseUser.uid}, role set from Firestore: ${profile.role}`);
             if ((pathname === '/login' || pathname === '/signup') && profile.role) { // Redirect from login/signup if already logged in
               router.push(`/${profile.role}/dashboard`);
             }
           } else {
-            console.warn(`User ${firebaseUser.uid} authenticated but no Firestore profile found.`);
+            console.warn(`[RoleContext] User ${firebaseUser.uid} authenticated but no Firestore profile found or profile was null.`);
             setUserProfile(null);
             setRoleState(null);
              if (pathname !== '/login' && pathname !== '/signup') router.push('/login'); 
           }
         } catch (error) {
-            console.error("Error fetching user profile during auth state change:", error);
+            console.error("[RoleContext] Error fetching user profile during auth state change:", error);
             setUserProfile(null);
             setRoleState(null);
             if (pathname !== '/login' && pathname !== '/signup') router.push('/login');
@@ -74,7 +75,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         setUserProfile(null);
         setRoleState(null);
-        console.log("User logged out or not authenticated.");
+        console.log("[RoleContext] User logged out or not authenticated.");
         // Allow access to login, signup, and coach success page if not authenticated
         if (
           pathname !== '/login' &&
@@ -92,8 +93,9 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await auth.signOut();
+      // onAuthStateChanged will handle setting user/role to null and redirecting
     } catch (error) {
-      console.error("Error signing out: ", error);
+      console.error("[RoleContext] Error signing out: ", error);
     }
   };
 
