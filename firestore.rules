@@ -6,80 +6,45 @@ service cloud.firestore {
 
     // Users Collection
     // - Authenticated users can create their own profile.
-    // - Document ID must match the authenticated user's UID.
-    // - Data being written must match expected structure (uid, email, role, displayName, createdAt).
-    // - Email domain validation for admin/coach roles.
-    // - Authenticated users can read their own profile.
-    // - Authenticated users can update their own displayName, photoURL. (Role, email, uid, createdAt should be immutable or admin-only).
-    // - Admins can read/write any user profile (useful for user management).
+    // - Authenticated users can read, update, or delete their own profile.
+    // - The 'uid' field in the document data must match the authenticated user's UID for creates.
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      
-      allow create: if request.auth != null && request.auth.uid == userId &&
-                  request.resource.data.uid == request.auth.uid &&
-                  request.resource.data.email == request.auth.token.email && // Ensure email matches token
-                  request.resource.data.role in ['admin', 'coach', 'client'] &&
-                  (request.resource.data.role == 'admin' || request.resource.data.role == 'coach' ? request.resource.data.email.matches('.*@hmperform\\.com$') : true) &&
-                  request.resource.data.displayName is string &&
-                  request.resource.data.size() >= 4 && request.resource.data.size() <= 8 && // uid, email, displayName, role, createdAt are base + optionals
-                  (!('photoURL' in request.resource.data) || request.resource.data.photoURL is string) &&
-                  (!('coachId' in request.resource.data) || request.resource.data.coachId is string) &&
-                  (!('stripeCustomerId' in request.resource.data) || request.resource.data.stripeCustomerId is string) &&
-                  request.resource.data.createdAt == request.time; // Ensure createdAt is set by the server
-
-      allow update: if request.auth != null && 
-                  ( (request.auth.uid == userId && 
-                    request.resource.data.uid == request.auth.uid && // uid cannot change
-                    request.resource.data.email == resource.data.email && // email cannot change by user
-                    request.resource.data.role == resource.data.role && // role cannot change by user
-                    request.resource.data.createdAt == resource.data.createdAt && // createdAt cannot change
-                    (!('photoURL' in request.resource.data) || request.resource.data.photoURL is string) &&
-                    (!('displayName' in request.resource.data) || request.resource.data.displayName is string) &&
-                    (!('coachId' in request.resource.data) || request.resource.data.coachId is string) && // coachId might be updatable by admin or specific logic
-                    (!('stripeCustomerId' in request.resource.data) || request.resource.data.stripeCustomerId is string) &&
-                    (request.resource.data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'photoURL', 'createdAt', 'coachId', 'stripeCustomerId'])) // Only allow these fields
-                  ) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ); // Admin can update anything
-      
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can delete users
+      allow read, update, delete: if request.auth.uid == userId;
+      allow create: if request.auth.uid == userId && request.resource.data.uid == request.auth.uid;
     }
 
     // Sessions Collection
-    // - Coaches can create sessions. (Ensure coachId matches auth.uid)
-    // - Clients can read sessions where their clientId matches auth.uid.
-    // - Coaches can read sessions where their coachId matches auth.uid.
-    // - Admins can read/write all sessions.
-    // - Coaches can update sessions they created (e.g. status, notes) but perhaps not client/coach IDs.
+    // These are basic rules and NEED TO BE REFINED based on your app's logic.
+    // For example:
+    // - Clients should only be able to read their own sessions.
+    // - Coaches should be able to create sessions, and read/update sessions they are assigned to.
+    // - Admins should have broader read access, and potentially update rights for status changes.
     match /sessions/{sessionId} {
-      allow read: if request.auth != null && 
-                  (resource.data.clientId == request.auth.uid || 
-                   resource.data.coachId == request.auth.uid ||
-                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      // Allow logged-in users to read sessions (placeholder - too permissive for production)
+      allow read: if request.auth != null;
 
-      allow create: if request.auth != null && 
-                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
-                   request.resource.data.coachId == request.auth.uid &&
-                   request.resource.data.createdAt == request.time &&
-                   request.resource.data.updatedAt == request.time;
-                   // Add more checks for required fields (clientName, sessionDate, type, notes, status etc.)
+      // Allow coaches to create sessions
+      // Ensure the coachId in the document matches the authenticated user's UID
+      // and that the role of the user creating it is 'coach' (fetch user profile to verify role server-side if needed via functions, or trust client for now with strict client-side validation)
+      allow create: if request.auth != null && request.resource.data.coachId == request.auth.uid;
+      // Allow coaches or admins to update sessions (e.g., status changes by admin)
+      // This needs to be more granular.
+      allow update: if request.auth != null && (request.resource.data.coachId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
 
-      allow update: if request.auth != null &&
-                  ( (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
-                     resource.data.coachId == request.auth.uid && // Coach can only update their own sessions
-                     request.resource.data.updatedAt == request.time
-                     // Add field-level restrictions: e.g., coach cannot change clientId once set
-                  ) ||
-                    (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
-                     request.resource.data.updatedAt == request.time 
-                    ) // Admin can update any session
-                  );
-      
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can delete sessions
+
+      // Generally, don't allow client-side deletes of sessions without specific logic.
+      allow delete: if false; // Or restrict to admin/coach under certain conditions
     }
 
-    // AppSettings Collection (Example for Stripe keys, etc.)
-    // - Only admins should be able to read/write these settings.
-    match /appSettings/{settingId} {
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // Example for appSettings (if you implement it)
+    // match /appSettings/{settingId} {
+    //   allow read: if true; // Publicly readable settings
+    //   allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can write
+    // }
+
+    // Fallback rule: Deny all other access to prevent unintended access
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
