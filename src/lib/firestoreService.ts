@@ -68,14 +68,15 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     }
     console.log(`No user profile found for UID: ${uid}`);
     return null;
-  } catch (error) {
-    console.error(`Error fetching user profile for UID ${uid}:`, error); // Log the actual Firebase error
+  } catch (error: any) {
+    console.error(`Error fetching user profile for UID ${uid}. Raw Firebase error:`, error);
     if (error instanceof Error) {
       if (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized")) {
         throw error; // Re-throw specific configuration errors
       }
-      // For other errors, throw a new error that includes the original message
-      throw new Error(`Failed to fetch user profile for UID ${uid}. Original error: ${error.message}`);
+      // For other errors, throw a new error that includes the original message and code if available
+      const firebaseErrorCode = (error as any).code || 'N/A';
+      throw new Error(`Failed to fetch user profile for UID ${uid}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
     }
     // Fallback for non-Error objects
     throw new Error(`Failed to fetch user profile for UID ${uid}. An unknown error occurred.`);
@@ -92,14 +93,15 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
       createdAt: profileData.createdAt || serverTimestamp(),
     });
     console.log(`User profile created/updated in Firestore for UID: ${uid}`);
-  } catch (error) {
-    console.error(`Error creating/updating user profile in Firestore for UID ${uid}:`, error);
+  } catch (error: any) {
+    console.error(`Error creating/updating user profile in Firestore for UID ${uid}. Raw Firebase error:`, error);
     if (error instanceof Error) {
         if (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized")) {
             throw error; // Re-throw specific configuration errors
         }
-        // For other errors, throw a new error that includes the original message
-        throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. Original error: ${error.message}`);
+        // For other errors, throw a new error that includes the original message and code if available
+        const firebaseErrorCode = (error as any).code || 'N/A';
+        throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
     }
     // Fallback for non-Error objects
     throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. An unknown error occurred.`);
@@ -130,12 +132,13 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
         sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     });
-  } catch (error) {
-    console.error(`Error fetching client sessions for client ID ${clientId}:`, error);
+  } catch (error: any) {
+    console.error(`Error fetching client sessions for client ID ${clientId}. Raw Firebase error:`, error);
     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    throw new Error(`Failed to fetch client sessions for client ID ${clientId}.`);
+    const firebaseErrorCode = (error as any).code || 'N/A';
+    throw new Error(`Failed to fetch client sessions for client ID ${clientId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
   }
 }
 
@@ -161,12 +164,13 @@ export async function getCoachSessions(coachId: string): Promise<Session[]> {
         sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     });
-  } catch (error) {
-    console.error(`Error fetching coach sessions for coach ID ${coachId}:`, error);
+  } catch (error: any) {
+    console.error(`Error fetching coach sessions for coach ID ${coachId}. Raw Firebase error:`, error);
     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    throw new Error(`Failed to fetch coach sessions for coach ID ${coachId}.`);
+    const firebaseErrorCode = (error as any).code || 'N/A';
+    throw new Error(`Failed to fetch coach sessions for coach ID ${coachId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
   }
 }
 
@@ -182,12 +186,13 @@ export async function logSession(sessionData: NewSessionData): Promise<string> {
     });
     console.log(`Session logged with ID: ${docRef.id}`);
     return docRef.id;
-  } catch (error) {
-    console.error("Error logging session:", error);
+  } catch (error: any) {
+    console.error("Error logging session. Raw Firebase error:", error);
     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    throw new Error("Failed to log session.");
+    const firebaseErrorCode = (error as any).code || 'N/A';
+    throw new Error(`Failed to log session. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
   }
 }
 
@@ -206,12 +211,13 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
     }
     console.log(`No session found with ID: ${sessionId}`);
     return null;
-  } catch (error) {
-    console.error(`Error fetching session by ID ${sessionId}:`, error);
+  } catch (error: any) {
+    console.error(`Error fetching session by ID ${sessionId}. Raw Firebase error:`, error);
      if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    throw new Error(`Failed to fetch session by ID ${sessionId}.`);
+    const firebaseErrorCode = (error as any).code || 'N/A';
+    throw new Error(`Failed to fetch session by ID ${sessionId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
   }
 }
 
@@ -227,12 +233,13 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
     
     await updateDoc(sessionDocRef, updateData);
     console.log(`Session updated: ${sessionId}`);
-  } catch (error) {
-    console.error(`Error updating session ${sessionId}:`, error);
+  } catch (error: any) {
+    console.error(`Error updating session ${sessionId}. Raw Firebase error:`, error);
     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    throw new Error(`Failed to update session ${sessionId}.`);
+    const firebaseErrorCode = (error as any).code || 'N/A';
+    throw new Error(`Failed to update session ${sessionId}. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
   }
 }
 
@@ -254,12 +261,13 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
         sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     });
-  } catch (error) {
-    console.error("Error fetching all sessions for admin:", error);
+  } catch (error: any) {
+    console.error("Error fetching all sessions for admin. Raw Firebase error:", error);
     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    throw new Error("Failed to fetch all sessions for admin.");
+    const firebaseErrorCode = (error as any).code || 'N/A';
+    throw new Error(`Failed to fetch all sessions for admin. Firebase code: ${firebaseErrorCode}. Original error: ${error.message}`);
   }
 }
 
