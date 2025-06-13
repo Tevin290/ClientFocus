@@ -28,7 +28,7 @@ export default function RootLayout({
           Manual <link> tags for Google Fonts have been removed.
         */}
       </head>
-      <body className={`${poppins.variable} font-body antialiased`}>
+      <body className={`${poppins.variable} font-body antialiased`} suppressHydrationWarning={true}>
         <RoleProvider>
           {children}
           <Toaster />
