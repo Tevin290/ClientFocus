@@ -89,8 +89,8 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
     const userDocRef = doc(db, 'users', uid);
     await setDoc(userDocRef, {
       ...profileData,
-      uid,
-      createdAt: profileData.createdAt || serverTimestamp(),
+      uid, // Ensure uid is part of the document data itself
+      createdAt: profileData.createdAt || serverTimestamp(), // Use provided createdAt or serverTimestamp
     });
     console.log(`User profile created/updated in Firestore for UID: ${uid}`);
   } catch (error: any) {
@@ -271,3 +271,5 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
   }
 }
 
+
+    
