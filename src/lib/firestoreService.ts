@@ -2,7 +2,7 @@
 'use server';
 
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase'; // Added auth import for logging
+import { db, isFirebaseConfigured, auth } from './firebase'; // auth imported for logging
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
@@ -49,6 +49,12 @@ export interface NewSessionData {
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   ensureFirebaseIsOperational();
+  console.log(`[firestoreService] getUserProfile called for UID: ${uid}`);
+  if (auth.currentUser) {
+    console.log(`[firestoreService] Current auth.currentUser.uid in getUserProfile: ${auth.currentUser.uid}`);
+  } else {
+    console.log(`[firestoreService] No auth.currentUser in getUserProfile when fetching for: ${uid}`);
+  }
   try {
     const userDocRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userDocRef);
@@ -56,26 +62,27 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       const data = userSnap.data();
       // Ensure role is valid or null
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
+      console.log(`[firestoreService] Profile found for UID ${uid}, role: ${role}`);
       return {
-        uid, 
+        uid,
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL,
-        createdAt: data.createdAt, 
+        createdAt: data.createdAt,
         coachId: data.coachId,
         stripeCustomerId: data.stripeCustomerId,
       } as UserProfile;
     }
-    console.log(`No user profile found for UID: ${uid}`);
+    console.log(`[firestoreService] No user profile found for UID: ${uid}`);
     return null;
   } catch (error: any) {
-    console.error(`Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
+    console.error(`[firestoreService] Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
     let detailedMessage = `Failed to fetch user profile for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
     else detailedMessage += ` An unknown error occurred.`;
-    
+
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw new Error(error.message); // Re-throw specific configuration errors
     }
@@ -87,20 +94,24 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
   ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
+    // This is the data that will be written to Firestore
     const dataToSet = {
       ...profileData,
-      uid, 
+      uid, // Ensure the UID from auth is part of the document data
       createdAt: profileData.createdAt instanceof Timestamp ? profileData.createdAt : serverTimestamp(),
     };
 
-    console.log('[firestoreService] Attempting to create user profile for UID:', uid);
-    console.log('[firestoreService] Data to write:', JSON.stringify(dataToSet, null, 2));
-    // Note: auth.currentUser here is client-side state if this function is called from client.
-    // Security rules use server-side request.auth.
+    console.log('[firestoreService] Attempting to create user profile for UID (argument):', uid);
+    console.log('[firestoreService] Profile data received (argument):', JSON.stringify(profileData, null, 2));
+    console.log('[firestoreService] FINAL dataToSet being written to Firestore:', JSON.stringify(dataToSet, null, 2)); // VERY IMPORTANT LOG
+
     if (auth.currentUser) {
-        console.log('[firestoreService] Current Firebase Auth user (client-side):', auth.currentUser.uid, auth.currentUser.email);
+        console.log('[firestoreService] Current Firebase Auth user (client-side) before setDoc:', auth.currentUser.uid, auth.currentUser.email, 'Display Name:', auth.currentUser.displayName);
+        if (auth.currentUser.uid !== uid) {
+            console.warn(`[firestoreService] MISMATCH! auth.currentUser.uid (${auth.currentUser.uid}) is different from uid argument (${uid}) for createUserProfileInFirestore.`);
+        }
     } else {
-        console.log('[firestoreService] No Firebase Auth user currently signed in (client-side view). This is unexpected if called after signup.');
+        console.warn('[firestoreService] auth.currentUser is null unexpectedly before setDoc. This is highly unusual if called after signup success.');
     }
 
     await setDoc(userDocRef, dataToSet);
@@ -113,7 +124,7 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
     else detailedMessage += ` An unknown error occurred.`;
 
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw new Error(error.message);
+      throw error;
     }
     throw new Error(detailedMessage);
   }
@@ -187,7 +198,7 @@ export async function getCoachSessions(coachId: string): Promise<Session[]> {
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
     else detailedMessage += ` An unknown error occurred.`;
-    
+
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
@@ -245,7 +256,7 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
     else detailedMessage += ` An unknown error occurred.`;
-    
+
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
@@ -262,7 +273,7 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
     if (updates.sessionDate) {
       updateData.sessionDate = Timestamp.fromDate(new Date(updates.sessionDate));
     }
-    
+
     await updateDoc(sessionDocRef, updateData);
     console.log(`Session updated: ${sessionId}`);
   } catch (error: any) {
