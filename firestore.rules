@@ -5,47 +5,57 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Users Collection
-    // - Authenticated users can create their own profile.
-    // - Authenticated users can read and update their own profile.
-    // - No one can delete user profiles through client-side requests (manage this via Admin SDK if needed).
-    // - Only admins can list/read all user profiles (not implemented in this rule, add if needed for admin panel).
+    // - Authenticated users can read their own profile.
+    // - Authenticated users can create their own profile (e.g., during sign-up).
+    //   - Ensure the UID in the document matches their auth UID.
+    //   - Ensure required fields like email and role are present.
+    // - Authenticated users can update their own profile (specific fields might be restricted further).
+    // - Deleting user profiles might be restricted to admins or disabled.
     match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId &&
                        request.resource.data.uid == userId &&
                        request.resource.data.email == request.auth.token.email &&
                        request.resource.data.role in ['admin', 'coach', 'client'] &&
-                       // Ensure @hmperform.com for admin/coach roles if role is being set on creation
-                       (request.resource.data.role == 'client' || 
-                        (request.resource.data.role in ['admin', 'coach'] && request.resource.data.email.matches('.*@hmperform\\.com$')));
-      allow read, update: if request.auth != null && request.auth.uid == userId;
-      allow delete: if false; // Generally, don't allow client-side deletes
-      allow list: if false; // Prevent listing all users by default
+                       'displayName' in request.resource.data &&
+                       request.resource.data.createdAt == request.time;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      // allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Example: only admins can delete
     }
 
-    // Sessions Collection (Example: More granular rules needed based on roles)
-    // - Authenticated users can create sessions (coaches typically).
-    // - Users can only read sessions where they are the client or the coach.
-    // - Admins might be able to read all sessions.
-    // - Updates/deletes should be restricted.
+    // Sessions Collection
+    // These are very basic. You'll need to refine these based on your app's logic.
+    // - Who can create sessions? (Likely coaches)
+    // - Who can read sessions? (Clients their own, coaches their own, admins all?)
+    // - Who can update sessions? (Coaches their own, admins all?)
     match /sessions/{sessionId} {
-      allow create: if request.auth != null; // Coach creating a session
-      
-      // Allow read if user is the client for the session OR the coach for the session
-      allow read: if request.auth != null && 
-                     (request.auth.uid == resource.data.clientId || request.auth.uid == resource.data.coachId);
-      
-      // Allow update if user is the coach for the session (e.g., coach updates notes, admin updates status)
-      // Or if user is an admin (you'd need to check role from their user profile - more complex rule)
-      allow update: if request.auth != null && request.auth.uid == resource.data.coachId; 
-                      // Add admin role check here if needed: 
-                      // || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      
-      allow delete: if false; // Generally, restrict direct deletion
+      allow read: if request.auth != null; // Placeholder: Allows any authenticated user to read any session. REFINE THIS.
+      // Example: Client can read their own sessions
+      // allow read: if request.auth != null && resource.data.clientId == request.auth.uid;
+      // Example: Coach can read sessions they created
+      // allow read: if request.auth != null && resource.data.coachId == request.auth.uid;
+      // Example: Admin can read any session
+      // allow read: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
 
-      // Example for admin to read all sessions - requires role check
-      // allow list, read: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create: if request.auth != null; // Placeholder: Allows any authenticated user to create sessions. REFINE THIS.
+      // Example: Only coaches can create sessions
+      // allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
+      //                  request.resource.data.coachId == request.auth.uid;
+
+
+      allow update: if request.auth != null; // Placeholder: Allows any authenticated user to update. REFINE THIS.
+      // Example: Only coaches who created the session or admins can update
+      // allow update: if request.auth != null &&
+      //                  (resource.data.coachId == request.auth.uid ||
+      //                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Example: Only admins can delete
     }
 
-    // Add rules for other collections as needed
+    // You might add other collections here (e.g., appSettings for Stripe keys if stored in Firestore)
+    // match /appSettings/{settingsId} {
+    //   allow read: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    //   allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // }
   }
 }
