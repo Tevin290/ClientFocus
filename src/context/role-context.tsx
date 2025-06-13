@@ -54,24 +54,20 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
             setUserProfile(profile);
             setRoleState(profile.role);
             console.log("User authenticated, role set from Firestore:", profile.role);
-            if (pathname === '/login' && profile.role) {
+            if ((pathname === '/login' || pathname === '/signup') && profile.role) { // Redirect from login/signup if already logged in
               router.push(`/${profile.role}/dashboard`);
             }
           } else {
-            // This case might happen if a user exists in Firebase Auth but not in Firestore `users` collection.
-            // This could be an error state or a new user who needs a profile created.
             console.warn(`User ${firebaseUser.uid} authenticated but no Firestore profile found.`);
             setUserProfile(null);
             setRoleState(null);
-            // Potentially log them out or redirect to a profile setup page
-             if (pathname !== '/login') router.push('/login'); // Redirect to login if no profile
+             if (pathname !== '/login' && pathname !== '/signup') router.push('/login'); 
           }
         } catch (error) {
             console.error("Error fetching user profile during auth state change:", error);
             setUserProfile(null);
             setRoleState(null);
-            // Potentially log them out
-            if (pathname !== '/login') router.push('/login');
+            if (pathname !== '/login' && pathname !== '/signup') router.push('/login');
         }
 
       } else { // User is logged out
@@ -79,23 +75,25 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         setUserProfile(null);
         setRoleState(null);
         console.log("User logged out or not authenticated.");
-        if (pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) { // Allow success page access without immediate redirect
+        // Allow access to login, signup, and coach success page if not authenticated
+        if (
+          pathname !== '/login' &&
+          pathname !== '/signup' &&
+          !pathname.startsWith('/coach/log-session/success')
+        ) {
             router.push('/login');
         }
       }
       setIsLoading(false);
     });
     return () => unsubscribe();
-  }, [router, pathname]); // Added router and pathname to dependencies
+  }, [router, pathname]);
 
   const logout = async () => {
     try {
       await auth.signOut();
-      // onAuthStateChanged will handle clearing user, userProfile, and role states
-      // and redirecting to login.
     } catch (error) {
       console.error("Error signing out: ", error);
-      // Handle logout error (e.g., show a toast)
     }
   };
 
@@ -114,3 +112,4 @@ export const useRole = (): RoleContextType => {
   }
   return context;
 };
+
