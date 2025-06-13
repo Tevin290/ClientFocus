@@ -10,10 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Label } from '@/components/ui/label'; // Added import
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
 import { Bot, Save, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const sessionLogSchema = z.object({
   clientName: z.string().min(1, 'Client Name is required'),
@@ -29,6 +30,7 @@ type SessionLogFormValues = z.infer<typeof sessionLogSchema>;
 
 export function SessionLogForm() {
   const { toast } = useToast();
+  const router = useRouter();
   const [isSummarizing, setIsSummarizing] = useState(false);
 
   const form = useForm<SessionLogFormValues>({
@@ -75,13 +77,20 @@ export function SessionLogForm() {
   const onSubmit: SubmitHandler<SessionLogFormValues> = (data) => {
     console.log('Session Log Data:', data);
     // Here you would typically send data to your backend
-    toast({
-      title: 'Session Logged',
-      description: `Session for ${data.clientName} has been successfully logged.`,
-      variant: 'default', // Using Shadcn default, which is not green. You might want custom success variant.
-                          // For now, using default. Success variant could be added to globals.css
-    });
-    form.reset(); // Reset form after successful submission
+    // For now, we simulate success and navigate
+    
+    // You can still show a toast if you like, or rely on the success page
+    // toast({
+    //   title: 'Session Logged',
+    //   description: `Session for ${data.clientName} has been successfully logged.`,
+    // });
+
+    // Navigate to the success page
+    router.push('/coach/log-session/success');
+    // It's generally good practice to reset the form if the user might log another session from the success page.
+    // However, since the user is navigating away and might come back via "Log Another Session",
+    // the form will be fresh anyway. If we were staying on the same page, reset would be more critical.
+    // form.reset(); 
   };
 
   return (

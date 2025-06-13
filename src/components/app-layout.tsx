@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -65,6 +66,7 @@ const navItems: NavItem[] = [
   
   { href: '/coach/dashboard', label: 'Coach Dashboard', icon: BarChart3, roles: ['coach'] },
   { href: '/coach/log-session', label: 'Log Session', icon: FileText, roles: ['coach'] },
+  { href: '/coach/my-sessions', label: 'My Sessions', icon: History, roles: ['coach'] }, // Changed icon to History for consistency
   { href: '/coach/my-clients', label: 'My Clients', icon: Users, roles: ['coach'], disabled: true },
 
   { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: true },
@@ -100,7 +102,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, []);
   
   useEffect(() => {
-    if(!isRoleLoading && !role && pathname !== '/login') {
+    if(!isRoleLoading && !role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) { // Allow success page access
       router.push('/login');
     }
   }, [role, isRoleLoading, pathname, router]);
@@ -118,9 +120,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  const filteredNavItems = navItems.filter(item => item.roles.includes(role) || role === 'admin'); // Admin sees all for now
+  const filteredNavItems = navItems.filter(item => item.roles.includes(role) || (role === 'admin' && !item.disabled)); // Admin sees non-disabled
 
-  if (!isMounted || isRoleLoading) {
+  if (!isMounted || (isRoleLoading && pathname !== '/coach/log-session/success')) {
     return (
       <div className="flex flex-col h-screen">
         <div className="flex items-center justify-between p-4 border-b">
@@ -142,7 +144,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  if (!role && pathname !== '/login') {
+  if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) {
      // This check might be redundant due to useEffect redirect, but good for initial render blocking
     return null; // Or a loading/redirect indicator
   }
