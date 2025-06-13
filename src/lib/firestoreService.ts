@@ -69,11 +69,16 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     console.log(`No user profile found for UID: ${uid}`);
     return null;
   } catch (error) {
-    console.error(`Error fetching user profile for UID ${uid}:`, error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw error;
+    console.error(`Error fetching user profile for UID ${uid}:`, error); // Log the actual Firebase error
+    if (error instanceof Error) {
+      if (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized")) {
+        throw error; // Re-throw specific configuration errors
+      }
+      // For other errors, throw a new error that includes the original message
+      throw new Error(`Failed to fetch user profile for UID ${uid}. Original error: ${error.message}`);
     }
-    throw new Error(`Failed to fetch user profile for UID ${uid}.`);
+    // Fallback for non-Error objects
+    throw new Error(`Failed to fetch user profile for UID ${uid}. An unknown error occurred.`);
   }
 }
 
@@ -252,3 +257,4 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error("Failed to fetch all sessions for admin.");
   }
 }
+
