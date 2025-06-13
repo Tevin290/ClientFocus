@@ -1,65 +1,83 @@
 
 'use client'; 
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { SessionCard, type Session } from "@/components/shared/session-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { History } from "lucide-react";
-
-// Mock data for client's session history
-const mockClientSessions: Session[] = [
-  { 
-    id: 'c1', 
-    coachName: 'Dr. John Doe', 
-    sessionDate: '2024-07-15', 
-    sessionType: 'Full', 
-    summary: 'We discussed your progress on project milestones and brainstormed strategies for overcoming recent obstacles. Key actions include A, B, and C.',
-    videoLink: 'https://example.com/recording1',
-  },
-  { 
-    id: 'c2', 
-    coachName: 'Jane Smith', 
-    sessionDate: '2024-06-20', 
-    sessionType: 'Half', 
-    summary: 'Quick check-in on time management. Reviewed weekly planner and identified areas for improvement.',
-  },
-  { 
-    id: 'c3', 
-    coachName: 'Dr. John Doe', 
-    sessionDate: '2024-05-10', 
-    sessionType: 'Full', 
-    summary: 'Deep dive into Q2 goals. Set clear objectives and established a timeline for deliverables. Client felt positive about the direction.',
-    videoLink: 'https://example.com/recording2',
-  },
-];
+import { History, Loader2 } from "lucide-react";
+import { useRole } from '@/context/role-context'; // To get current user for fetching data
+import { getClientSessions } from '@/lib/firestoreService'; // Import the service
 
 export default function ClientHistoryPage() {
-  const handleViewDetails = (session: Session) => {
-    // In a real app, this might open a modal or navigate to a detailed session view
-    alert(`Viewing details for session on ${new Date(session.sessionDate).toLocaleDateString()}`);
-  };
+  const { role, user } = useRole(); // Assuming useRole context might provide the authenticated user object
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (role === 'client' && user?.uid) { // Ensure user is a client and UID is available
+      const fetchSessions = async () => {
+        setIsLoading(true);
+        try {
+          // Replace with actual Firebase user ID from auth context
+          // For now, using a placeholder or assuming user.uid exists from context
+          const fetchedSessions = await getClientSessions(user.uid); 
+          setSessions(fetchedSessions);
+        } catch (error) {
+          console.error("Failed to fetch client sessions:", error);
+          // Handle error (e.g., show toast)
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchSessions();
+    } else if (role !== 'client') {
+      // Handle cases where a non-client tries to access this page, or user is not available
+      setIsLoading(false);
+      setSessions([]); // Clear sessions if not applicable
+    } else {
+        // If user.uid is not yet available but role is client, keep loading or use mock
+        // For demonstration, falling back to mock if user.uid isn't ready
+        // In a real app, you'd ensure user object is loaded from context before fetching
+        const loadMock = async () => {
+             const mockData = await getClientSessions("mock-client-id"); // fallback
+             setSessions(mockData);
+             setIsLoading(false);
+        }
+        loadMock();
+    }
+  }, [role, user]); // Add user to dependency array
+
+  if (isLoading) {
+    return (
+      <div>
+        <PageHeader title="My Session History" description="Review your past coaching sessions, notes, and recordings." />
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-2">Loading your sessions...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <PageHeader title="My Session History" description="Review your past coaching sessions, notes, and recordings." />
       
-      {mockClientSessions.length === 0 ? (
+      {sessions.length === 0 ? (
         <Alert className="shadow-light">
           <History className="h-5 w-5" />
           <AlertTitle className="font-headline">No Sessions Yet!</AlertTitle>
           <AlertDescription>
-            Your past coaching sessions will appear here once they are logged.
+            Your past coaching sessions will appear here once they are logged by your coach.
           </AlertDescription>
         </Alert>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {mockClientSessions.map((session) => (
+          {sessions.map((session) => (
             <SessionCard 
               key={session.id} 
-              session={session} 
-              // showActions={true} // Enable if you have a details view/modal
-              // onViewDetails={handleViewDetails}
+              session={session}
             />
           ))}
         </div>
