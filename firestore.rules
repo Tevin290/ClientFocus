@@ -14,28 +14,21 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Helper function to check email domain (will only be used by session rules or if you re-add restrictions later)
-    function isHmPerformEmail() {
-      return request.auth.token.email != null && request.auth.token.email.matches('.*@hmperform\\.com$');
-    }
-
     // Users Collection
     match /users/{userId} {
       // Allow create:
       // 1. User must be authenticated.
       // 2. The UID in the document must match the authenticated user's UID.
       // 3. The email in the document must match the authenticated user's email.
-      // No other restrictions on role or email domain for creation.
+      // This is now very lenient: any authenticated user can create their own profile.
       allow create: if isAuthenticated() &&
                        request.resource.data.uid == request.auth.uid &&
                        request.resource.data.email == request.auth.token.email;
 
-      // Allow read: User can read their own profile.
+      // Allow read, update: User can read/update their own profile.
+      // Disallow role changes by the user themselves via update.
       allow read: if isOwner(userId);
-
-      // Allow update: User can update their own profile.
-      // Prevent role change by the user themselves.
-      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role;
+      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role; // Prevent role change
 
       // Generally, disallow delete for user profiles unless a specific admin function is built.
       allow delete: if false;
@@ -44,23 +37,27 @@ service cloud.firestore {
     // Sessions Collection
     match /sessions/{sessionId} {
       function userRole() {
-        // It's good practice to check if the user document exists and has a role
-        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-        return userDoc.exists && userDoc.data.role != null ? userDoc.data.role : '';
+        // Check if user document exists before trying to access .data.role
+        return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : null;
       }
       function isSessionCoach() {
-        return userRole() == 'coach' && resource.data.coachId == request.auth.uid;
+        // Ensure userRole() is not null before comparison and coachId exists in resource.data
+        let role = userRole();
+        return role == 'coach' && resource.data.coachId == request.auth.uid;
       }
       function isSessionClient() {
-        return userRole() == 'client' && resource.data.clientId == request.auth.uid;
+        let role = userRole();
+        return role == 'client' && resource.data.clientId == request.auth.uid;
       }
       function isAdmin() {
-        return userRole() == 'admin';
+        let role = userRole();
+        return role == 'admin';
       }
 
       // Allow create:
       // - Authenticated coach can create a session.
-      // - coachId in sessionData must match request.auth.uid.
+      // - coachId in sessionData must match request.auth.uid if role is coach
       allow create: if isAuthenticated() && userRole() == 'coach' && request.resource.data.coachId == request.auth.uid;
 
       // Allow read:
@@ -76,7 +73,7 @@ service cloud.firestore {
                     isAdmin() ||
                     (
                       isSessionCoach() &&
-                      resource.data.status == 'Logged'
+                      resource.data.status == 'Logged' // Example: Coach can only update if status is 'Logged'
                     )
                   );
       // Allow delete: (Typically restricted)
