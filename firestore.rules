@@ -4,47 +4,54 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users Collection
-    // Allow users to read, create, and update their own profile document.
-    // Deletion is typically handled by backend functions or admin processes.
-    match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      // Allow update if the user is authenticated and is the owner of the document.
-      // You might want to restrict which fields can be updated (e.g., role should likely only be set by admin/backend).
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow delete: if false; // Generally, clients should not delete their own user docs directly.
+    // Users can read and write their own profile
+    // This rule allows an authenticated user to read or write a document
+    // in the 'users' collection if the document's ID (uid) matches their own auth UID.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Sessions Collection
-    // These are very basic rules and NEED to be refined based on your app's logic.
+    // Sessions collection rules
     match /sessions/{sessionId} {
-      // Example: Allow a client to read sessions where their clientId matches.
-      allow read: if request.auth != null && (
-                    (resource.data.clientId == request.auth.uid) || // Client can read their sessions
-                    (resource.data.coachId == request.auth.uid) ||  // Coach can read their sessions
-                    (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') // Admin can read all
-                  );
+      // Allow authenticated users to create sessions (e.g., a coach)
+      // You'll likely want to add more conditions, e.g.,
+      // ensure request.resource.data.coachId == request.auth.uid
+      allow create: if request.auth != null;
 
-      // Example: Allow a coach to create sessions if their coachId in the request matches their UID.
-      // And allow admins to create sessions.
-      allow create: if request.auth != null && (
-                      (request.resource.data.coachId == request.auth.uid && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach') ||
-                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-                    );
+      // Allow clients to read their own sessions
+      allow read: if request.auth != null && resource.data.clientId == request.auth.uid;
 
-      // Example: Allow a coach to update sessions they created, or an admin to update any session.
-      // Ensure status updates are handled correctly (e.g., only admin can set to 'Billed').
-      allow update: if request.auth != null && (
-                      (resource.data.coachId == request.auth.uid && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach') ||
-                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-                    );
-      allow delete: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admin can delete
+      // Allow coaches to read sessions they are part of
+      // Or, more broadly if needed: if request.auth != null && resource.data.coachId == request.auth.uid;
+      // This is a combined rule. Admins might need broader access.
+      allow read: if request.auth != null && (resource.data.clientId == request.auth.uid || resource.data.coachId == request.auth.uid);
+
+
+      // Allow coaches to update sessions they own (e.g., status)
+      // Admins might also need update permissions for billing.
+      allow update: if request.auth != null && resource.data.coachId == request.auth.uid;
+
+      // Generally, disallow delete unless specifically needed and roles are checked.
+      allow delete: if false; // Example: allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Ensure all other paths are locked down unless explicitly allowed.
-    match /{document=**} {
-      allow read, write: if false;
+    // Add a more specific rule for admins to read all users and sessions for admin panel functionality
+    // This assumes you have a 'role' field in your user documents.
+    match /users/{userId} {
+      allow list, get: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Existing rule for self-read/write should be kept or merged if this path is the same.
+      // The previous /users/{uid} rule is more specific for self-access. This adds admin list/get.
     }
+    match /sessions/{sessionId} {
+      allow list, get: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Merge with previous /sessions/{sessionId} rules or ensure they don't conflict.
+    }
+
+
+    // IMPORTANT: Default deny all other paths not explicitly matched above.
+    // This is often implicit if no other rules match, but can be made explicit.
+    // However, if you had a match /{document=**} { allow read, write: if false; } at the end,
+    // ensure the more specific rules for /users and /sessions come BEFORE it.
+    // For simplicity, relying on specific matches and implicit deny for unmatched paths is common.
   }
 }
