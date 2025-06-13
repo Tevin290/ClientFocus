@@ -4,29 +4,40 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRole, type UserRole } from '@/context/role-context';
+import { useRole } from '@/context/role-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { LifeBuoy, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { LifeBuoy, AlertTriangle, Loader2 } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
+import { useForm, type SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 
-const DUMMY_CREDENTIALS: Record<Exclude<UserRole, null> & string, { email: string; pass: string }> = {
-  admin: { email: 'admin@example.com', pass: 'password123' },
-  coach: { email: 'coach@example.com', pass: 'password123' },
-  client: { email: 'client@example.com', pass: 'password123' },
-};
+const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
   const { role, isLoading: isRoleLoading, user } = useRole();
-  const [selectedRole, setSelectedRole] = useState<UserRole | ''>('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [firebaseNotConfigured, setFirebaseNotConfigured] = useState(false);
   const { toast } = useToast();
+
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !isFirebaseConfigured()) {
@@ -41,13 +52,13 @@ export default function LoginPage() {
   }, [toast]);
 
   useEffect(() => {
+    // If user is authenticated and role is determined, redirect to their dashboard
     if (!isRoleLoading && user && role) {
       router.push(`/${role}/dashboard`);
     }
   }, [user, role, isRoleLoading, router]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin: SubmitHandler<LoginFormValues> = async (data) => {
     if (firebaseNotConfigured) {
       toast({
         title: "Login Disabled",
@@ -57,35 +68,30 @@ export default function LoginPage() {
       return;
     }
 
-    if (selectedRole && selectedRole !== '') {
-      setIsLoggingIn(true);
-      const creds = DUMMY_CREDENTIALS[selectedRole as Exclude<UserRole, null>];
-      if (!creds) {
-        toast({ title: 'Error', description: 'Invalid role selection for dummy login.', variant: 'destructive' });
-        setIsLoggingIn(false);
-        return;
+    setIsLoggingIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, data.email, data.password);
+      // RoleContext will handle fetching profile and redirecting based on role
+      // Toast for success will be implicitly handled by RoleContext redirection or a general app welcome
+      // For now, let's keep a simple toast here, but ideally RoleContext success triggers a more global welcome.
+      toast({ title: 'Login Successful', description: `Welcome back!` });
+    } catch (error: any) {
+      console.error('Firebase Login Error:', error);
+      let errorMessage = 'Login failed. Please check your email and password or try again.';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = 'Invalid email or password.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'The email address format is not valid.';
       }
-
-      try {
-        await signInWithEmailAndPassword(auth, creds.email, creds.pass);
-        toast({ title: 'Login Successful', description: `Logging in as ${selectedRole}...` });
-      } catch (error: any) {
-        console.error('Firebase Login Error:', error);
-        let errorMessage = 'Login failed. Please check credentials or try again.';
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-            errorMessage = `Login failed for ${selectedRole}. Make sure the user ${creds.email} exists in Firebase Auth with the password 'password123'.`;
-        } else if (error.code === 'auth/invalid-email') {
-            errorMessage = `The email address ${creds.email} is not valid.`;
-        }
-        toast({ title: 'Login Failed', description: errorMessage, variant: 'destructive' });
-      } finally {
-        setIsLoggingIn(false);
-      }
+      toast({ title: 'Login Failed', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
+  // If role context is loading OR user is already authenticated and role is known, show loading or let useEffect redirect.
   if (isRoleLoading || (user && role)) {
-    return <div className="flex items-center justify-center min-h-screen bg-background"><p>Loading...</p></div>;
+    return <div className="flex items-center justify-center min-h-screen bg-background"><Loader2 className="h-10 w-10 animate-spin text-primary" /> <p className="ml-3 text-lg">Loading...</p></div>;
   }
 
   return (
@@ -96,7 +102,7 @@ export default function LoginPage() {
             <LifeBuoy className="h-16 w-16 text-primary" />
           </div>
           <CardTitle className="text-3xl font-headline">Welcome to SessionSync</CardTitle>
-          <CardDescription className="text-md">Select your role to simulate login</CardDescription>
+          <CardDescription className="text-md">Enter your credentials to log in</CardDescription>
           {firebaseNotConfigured && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive text-sm rounded-md flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
@@ -104,36 +110,61 @@ export default function LoginPage() {
             </div>
           )}
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <RadioGroup
-              value={selectedRole || undefined}
-              onValueChange={(value) => setSelectedRole(value as UserRole)}
-              className="space-y-2"
-              disabled={isLoggingIn || firebaseNotConfigured}
-            >
-              {(['admin', 'coach', 'client'] as Exclude<UserRole, null>[]).map((r) => (
-                <Label
-                  key={r}
-                  htmlFor={`role-${r}`}
-                  className={`flex items-center space-x-3 p-4 border rounded-md cursor-pointer transition-all hover:border-primary ${selectedRole === r ? 'border-primary ring-2 ring-primary bg-primary/10' : ''} ${isLoggingIn || firebaseNotConfigured ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <RadioGroupItem value={r} id={`role-${r}`} disabled={isLoggingIn || firebaseNotConfigured} />
-                  <span className="text-lg font-medium capitalize">{r}</span>
-                </Label>
-              ))}
-            </RadioGroup>
-            <Button type="submit" className="w-full text-lg py-6" disabled={!selectedRole || isLoggingIn || firebaseNotConfigured}>
-              {isLoggingIn ? 'Logging in...' : `Login as ${selectedRole ? selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1) : '...'}`}
-            </Button>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleLogin)}>
+            <CardContent className="space-y-6">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="email" 
+                        placeholder="you@example.com" 
+                        {...field} 
+                        disabled={isLoggingIn || firebaseNotConfigured} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="password" 
+                        placeholder="••••••••" 
+                        {...field} 
+                        disabled={isLoggingIn || firebaseNotConfigured} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" className="w-full text-lg py-6" disabled={isLoggingIn || firebaseNotConfigured}>
+                {isLoggingIn ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                {isLoggingIn ? 'Logging in...' : 'Login'}
+              </Button>
+            </CardContent>
           </form>
-        </CardContent>
+        </Form>
         <CardFooter className="flex flex-col items-center justify-center text-sm">
-          <Link href={selectedRole ? `/signup?role=${selectedRole}` : "/signup"} className="text-primary hover:underline">
+          <Link href="/signup" className="text-primary hover:underline">
             Don&apos;t have an account? Sign Up
           </Link>
-          <p className="mt-2 text-xs text-muted-foreground">This uses pre-defined credentials for demo purposes.</p>
-          <p className="text-xs text-muted-foreground">Ensure Firebase is configured and dummy users exist in Firebase Auth.</p>
+          {firebaseNotConfigured && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ensure Firebase is configured in <code>src/lib/firebase.ts</code>.
+            </p>
+          )}
         </CardFooter>
       </Card>
     </div>
