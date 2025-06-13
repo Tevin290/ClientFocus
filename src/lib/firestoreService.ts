@@ -1,19 +1,33 @@
 
 'use server';
 
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc, writeBatch, Timestamp, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc } from 'firebase/firestore';
+import { db, isFirebaseConfigured } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
+// Helper function to ensure Firebase is configured and db is available
+function ensureFirebaseIsOperational() {
+  if (!isFirebaseConfigured()) {
+    const errorMessage = "Firebase is not configured. Please add your Firebase config to src/lib/firebase.ts or environment variables.";
+    console.error(errorMessage + " Aborting Firestore operation.");
+    throw new Error(errorMessage);
+  }
+  if (!db) {
+    const dbErrorMessage = "Firestore DB is not initialized. This can happen if Firebase configuration is missing or incorrect.";
+    console.error(dbErrorMessage + " Aborting Firestore operation.");
+    throw new Error(dbErrorMessage);
+  }
+}
+
 export interface UserProfile {
   uid: string;
-  email: string; // Made non-null for core functionality
-  displayName: string; // Made non-null
+  email: string;
+  displayName: string;
   role: UserRole;
   photoURL?: string;
   createdAt: Timestamp; // Firestore Timestamp
-  coachId?: string; // For client roles
+  coachId?: string;
   stripeCustomerId?: string;
 }
 
@@ -23,7 +37,7 @@ export interface NewSessionData {
   clientId: string;
   clientName: string;
   clientEmail: string;
-  sessionDate: Date; // JS Date for input, convert to Timestamp for Firestore
+  sessionDate: Date;
   sessionType: 'Full' | 'Half';
   videoLink?: string;
   sessionNotes: string;
@@ -34,24 +48,20 @@ export interface NewSessionData {
 // --- User Management ---
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
-  if (!db) {
-    console.error("Firestore DB is not initialized in getUserProfile.");
-    throw new Error("Firestore not available");
-  }
+  ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userDocRef);
     if (userSnap.exists()) {
       const data = userSnap.data();
-      // Ensure role is a valid UserRole
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
-      return { 
-        uid, 
+      return {
+        uid,
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL,
-        createdAt: data.createdAt, // This will be a Firestore Timestamp
+        createdAt: data.createdAt,
         coachId: data.coachId,
         stripeCustomerId: data.stripeCustomerId,
       } as UserProfile;
@@ -59,38 +69,37 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     console.log(`No user profile found for UID: ${uid}`);
     return null;
   } catch (error) {
-    console.error("Error fetching user profile:", error);
-    throw error;
+    console.error(`Error fetching user profile for UID ${uid}:`, error);
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error(`Failed to fetch user profile for UID ${uid}.`);
   }
 }
 
-// Used by dummy data generation, ensure uid is passed and data matches UserProfile structure
 export async function createUserProfileInFirestore(uid: string, profileData: Omit<UserProfile, 'uid' | 'createdAt'> & {createdAt?: any}): Promise<void> {
-  if (!db) {
-    console.error("Firestore DB is not initialized in createUserProfileInFirestore.");
-    throw new Error("Firestore not available");
-  }
+  ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
     await setDoc(userDocRef, {
       ...profileData,
-      uid, // ensure uid is part of the document data
+      uid,
       createdAt: profileData.createdAt || serverTimestamp(),
     });
     console.log(`User profile created/updated in Firestore for UID: ${uid}`);
   } catch (error) {
-    console.error("Error creating/updating user profile in Firestore:", error);
-    throw error;
+    console.error(`Error creating/updating user profile in Firestore for UID ${uid}:`, error);
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error("Failed to create/update user profile in Firestore.");
   }
 }
 
 // --- Session Management ---
 
 export async function getClientSessions(clientId: string): Promise<Session[]> {
-  if (!db) {
-    console.error("Firestore DB is not initialized in getClientSessions.");
-    return []; // Or throw error
-  }
+  ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(
@@ -108,32 +117,20 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
       return {
         id: doc.id,
         ...data,
-        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(), // Convert Timestamp to string
+        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     });
   } catch (error) {
-    console.error("Error fetching client sessions:", error);
-    // Return mock data or rethrow, for now, returning empty to avoid breaking UI on error
-     return [ /*
-        {
-          id: 'mock_c1',
-          coachName: 'Dr. John Doe (Mock)',
-          clientName: 'Current Client (Mock)',
-          sessionDate: new Date('2024-07-15').toISOString(),
-          sessionType: 'Full',
-          summary: 'Client History (Mock): Discussed project milestones.',
-          videoLink: 'https://example.com/recording_mock1',
-          status: 'Logged',
-        }, */
-      ];
+    console.error(`Error fetching client sessions for client ID ${clientId}:`, error);
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error(`Failed to fetch client sessions for client ID ${clientId}.`);
   }
 }
 
 export async function getCoachSessions(coachId: string): Promise<Session[]> {
-  if (!db) {
-    console.error("Firestore DB is not initialized in getCoachSessions.");
-    return [];
-  }
+  ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(
@@ -155,22 +152,21 @@ export async function getCoachSessions(coachId: string): Promise<Session[]> {
       } as Session;
     });
   } catch (error) {
-    console.error("Error fetching coach sessions:", error);
-    return []; // Fallback or rethrow
+    console.error(`Error fetching coach sessions for coach ID ${coachId}:`, error);
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error(`Failed to fetch coach sessions for coach ID ${coachId}.`);
   }
 }
 
-
 export async function logSession(sessionData: NewSessionData): Promise<string> {
-   if (!db) {
-    console.error("Firestore DB is not initialized in logSession.");
-    throw new Error("Firestore not available");
-  }
+  ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     const docRef = await addDoc(sessionsCol, {
       ...sessionData,
-      sessionDate: Timestamp.fromDate(new Date(sessionData.sessionDate)), // Convert JS Date to Firestore Timestamp
+      sessionDate: Timestamp.fromDate(new Date(sessionData.sessionDate)),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -178,15 +174,15 @@ export async function logSession(sessionData: NewSessionData): Promise<string> {
     return docRef.id;
   } catch (error) {
     console.error("Error logging session:", error);
-    throw error;
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error("Failed to log session.");
   }
 }
 
 export async function getSessionById(sessionId: string): Promise<Session | null> {
-   if (!db) {
-    console.error("Firestore DB is not initialized in getSessionById.");
-    return null;
-  }
+  ensureFirebaseIsOperational();
   try {
     const sessionDocRef = doc(db, 'sessions', sessionId);
     const sessionSnap = await getDoc(sessionDocRef);
@@ -201,16 +197,16 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
     console.log(`No session found with ID: ${sessionId}`);
     return null;
   } catch (error) {
-    console.error("Error fetching session by ID:", error);
-    return null; // Or rethrow
+    console.error(`Error fetching session by ID ${sessionId}:`, error);
+     if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error(`Failed to fetch session by ID ${sessionId}.`);
   }
 }
 
 export async function updateSession(sessionId: string, updates: Partial<Omit<Session, 'id' | 'sessionDate'> & { sessionDate?: string | Date }>): Promise<void> {
-   if (!db) {
-    console.error("Firestore DB is not initialized in updateSession.");
-    throw new Error("Firestore not available");
-  }
+  ensureFirebaseIsOperational();
   try {
     const sessionDocRef = doc(db, 'sessions', sessionId);
     const updateData: any = { ...updates, updatedAt: serverTimestamp() };
@@ -222,16 +218,16 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
     await updateDoc(sessionDocRef, updateData);
     console.log(`Session updated: ${sessionId}`);
   } catch (error) {
-    console.error("Error updating session:", error);
-    throw error;
+    console.error(`Error updating session ${sessionId}:`, error);
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error(`Failed to update session ${sessionId}.`);
   }
 }
 
 export async function getAllSessionsForAdmin(): Promise<Session[]> {
-  if (!db) {
-    console.error("Firestore DB is not initialized in getAllSessionsForAdmin.");
-    return [];
-  }
+  ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(sessionsCol, orderBy('sessionDate', 'desc'));
@@ -250,6 +246,9 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     });
   } catch (error) {
     console.error("Error fetching all sessions for admin:", error);
-    return [];
+    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
+      throw error;
+    }
+    throw new Error("Failed to fetch all sessions for admin.");
   }
 }
