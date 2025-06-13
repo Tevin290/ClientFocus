@@ -1,3 +1,5 @@
+'use client';
+
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Users, DollarSign, Activity } from "lucide-react";
