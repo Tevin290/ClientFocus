@@ -94,10 +94,15 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
     console.log(`User profile created/updated in Firestore for UID: ${uid}`);
   } catch (error) {
     console.error(`Error creating/updating user profile in Firestore for UID ${uid}:`, error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw error;
+    if (error instanceof Error) {
+        if (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized")) {
+            throw error; // Re-throw specific configuration errors
+        }
+        // For other errors, throw a new error that includes the original message
+        throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. Original error: ${error.message}`);
     }
-    throw new Error("Failed to create/update user profile in Firestore.");
+    // Fallback for non-Error objects
+    throw new Error(`Failed to create/update user profile in Firestore for UID ${uid}. An unknown error occurred.`);
   }
 }
 
