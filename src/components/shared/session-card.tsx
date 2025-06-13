@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Video, FileText, ClockIcon, Users } from "lucide-react";
@@ -64,7 +65,7 @@ export function SessionCard({ session, showActions = false, onViewDetails }: Ses
         {session.status && (
            <div className="flex items-center text-sm">
             <ClockIcon className="mr-2 h-4 w-4 text-primary" />
-            <span className_ ="text-muted-foreground">Status: {session.status}</span>
+            <span className="text-muted-foreground">Status: {session.status}</span>
           </div>
         )}
 
