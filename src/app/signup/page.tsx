@@ -16,10 +16,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { UserPlus, AlertTriangle, LifeBuoy, Loader2 } from 'lucide-react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
-import { createUserProfileInFirestore } from '@/lib/firestoreService';
+import { createUserProfileInFirestore, type MinimalProfileDataForCreation } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
-import type { UserProfile } from '@/lib/firestoreService';
 
 
 const signupSchemaBase = z.object({
@@ -47,9 +46,6 @@ const signupSchema = signupSchemaBase
 
 
 type SignupFormValues = z.infer<typeof signupSchema>;
-
-// Define a type for the minimal data sent from signup to firestoreService
-type MinimalProfileDataForCreation = Pick<UserProfile, 'email' | 'displayName' | 'role'>;
 
 
 export default function SignupPage() {
@@ -95,7 +91,7 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
-    console.log('[SignupPage] Attempting sign up with form data:', data);
+    console.log('[SignupPage] Attempting sign up with form data:', {displayName: data.displayName, email: data.email, role: data.role});
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
@@ -103,27 +99,19 @@ export default function SignupPage() {
 
 
       if (firebaseUser) {
-        // Update Firebase Auth profile with display name
         await updateProfile(firebaseUser, { displayName: data.displayName });
         console.log('[SignupPage] Firebase Auth profile updated with displayName:', data.displayName);
-
-        // Log current auth state right before Firestore call
-        if (auth.currentUser) {
-            console.log('[SignupPage] auth.currentUser before creating Firestore profile:', auth.currentUser.uid, auth.currentUser.email, 'Display Name:', auth.currentUser.displayName);
-        } else {
-            console.warn('[SignupPage] auth.currentUser is null unexpectedly before creating Firestore profile.');
-        }
-
-        // Prepare a very clean and minimal profileData object for Firestore
+        
+        // Prepare the minimal data for Firestore
         const profileDataForFirestore: MinimalProfileDataForCreation = {
           email: data.email,
           displayName: data.displayName,
           role: data.role,
         };
-        console.log('[SignupPage] Minimal profileData being sent to createUserProfileInFirestore:', profileDataForFirestore);
-
+        
+        console.log('[SignupPage] Calling createUserProfileInFirestore with UID:', firebaseUser.uid, 'and data:', profileDataForFirestore);
         await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
-        console.log('[SignupPage] User profile creation in Firestore requested for UID:', firebaseUser.uid);
+        console.log('[SignupPage] User profile CREATED in Firestore for UID:', firebaseUser.uid);
 
 
         toast({
@@ -143,10 +131,10 @@ export default function SignupPage() {
         errorMessage = 'This email address is already in use.';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'The password is too weak.';
-      } else if (error.code === 'invalid-argument' && error.message && error.message.includes("Unsupported field value: undefined")) {
-        errorMessage = `Sign up failed due to invalid data: ${error.message}`;
       } else if (error.message && (error.message.includes("PERMISSION_DENIED") || error.message.includes("Missing or insufficient permissions"))){
-        errorMessage = "Sign up failed. Could not save profile to database due to permissions. Please contact an administrator or check Firestore rules.";
+        errorMessage = `Sign up failed. Could not save profile to database due to permissions (Error: ${error.message}). Please contact an administrator or check Firestore rules.`;
+      } else if (error.message && error.message.includes("Unsupported field value: undefined")) {
+         errorMessage = `Sign up failed due to invalid data (Error: ${error.message}). An optional field might have been passed as undefined.`;
       }
       toast({ title: 'Sign Up Failed', description: errorMessage, variant: 'destructive' });
     } finally {
@@ -179,9 +167,7 @@ export default function SignupPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Full Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Jane Doe" {...field} disabled={isSigningUp || firebaseNotConfigured} />
-                    </FormControl>
+                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} disabled={isSigningUp || firebaseNotConfigured} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -192,9 +178,7 @@ export default function SignupPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="e.g., jane.doe@example.com" {...field} disabled={isSigningUp || firebaseNotConfigured} />
-                    </FormControl>
+                    <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} disabled={isSigningUp || firebaseNotConfigured} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -205,9 +189,7 @@ export default function SignupPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} disabled={isSigningUp || firebaseNotConfigured} />
-                    </FormControl>
+                    <FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSigningUp || firebaseNotConfigured} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -218,9 +200,7 @@ export default function SignupPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} disabled={isSigningUp || firebaseNotConfigured} />
-                    </FormControl>
+                    <FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSigningUp || firebaseNotConfigured} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
