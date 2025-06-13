@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } // Added useRouter
+import { usePathname, useRouter }
 from 'next/navigation';
 import {
   SidebarProvider,
@@ -66,8 +66,8 @@ const navItems: NavItem[] = [
   
   { href: '/coach/dashboard', label: 'Coach Dashboard', icon: BarChart3, roles: ['coach'] },
   { href: '/coach/log-session', label: 'Log Session', icon: FileText, roles: ['coach'] },
-  { href: '/coach/my-sessions', label: 'My Sessions', icon: History, roles: ['coach'] }, // Changed icon to History for consistency
-  { href: '/coach/my-clients', label: 'My Clients', icon: Users, roles: ['coach'], disabled: true },
+  { href: '/coach/my-sessions', label: 'My Sessions', icon: History, roles: ['coach'] },
+  { href: '/coach/my-clients', label: 'My Clients', icon: Users, roles: ['coach'] },
 
   { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: true },
   { href: '/client/history', label: 'Session History', icon: History, roles: ['client'] },
@@ -84,7 +84,7 @@ const AppLogo = () => (
 export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { role, setRole, isLoading: isRoleLoading } = useRole();
-  const router = useRouter(); // Added useRouter
+  const router = useRouter(); 
   const [isMounted, setIsMounted] = useState(false);
   const [isStripeTestMode, setIsStripeTestMode] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -102,7 +102,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, []);
   
   useEffect(() => {
-    if(!isRoleLoading && !role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) { // Allow success page access
+    if(!isRoleLoading && !role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) { 
       router.push('/login');
     }
   }, [role, isRoleLoading, pathname, router]);
@@ -120,7 +120,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  const filteredNavItems = navItems.filter(item => item.roles.includes(role) || (role === 'admin' && !item.disabled)); // Admin sees non-disabled
+  const filteredNavItems = navItems.filter(item => {
+    if (item.roles.includes(role)) {
+      return !item.disabled; // Only include if not disabled
+    }
+    // For admin, include if not explicitly disabled. This logic might need refinement based on exact requirements.
+    // The current logic: if it's an admin route and not disabled, show it.
+    // If it's a route for another role, it must include 'admin' in its roles to be shown to admin.
+    // This maintains that admin sees its own, plus non-disabled coach/client routes if 'admin' is in their 'roles' array.
+    // For simplicity, let's assume admin only sees routes explicitly marked for 'admin'.
+    // The original line was: navItems.filter(item => item.roles.includes(role) || (role === 'admin' && !item.disabled));
+    // Correcting to ensure admin only sees admin roles OR enabled shared roles (if any).
+    // The simplest is: only show if the role matches and it's not disabled.
+    return item.roles.includes(role) && !item.disabled;
+  });
+
 
   if (!isMounted || (isRoleLoading && pathname !== '/coach/log-session/success')) {
     return (
@@ -145,8 +159,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
   
   if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) {
-     // This check might be redundant due to useEffect redirect, but good for initial render blocking
-    return null; // Or a loading/redirect indicator
+    return null; 
   }
 
 
@@ -160,13 +173,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <SidebarMenu>
             {filteredNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.disabled ? '#' : item.href}>
+                <Link href={item.href}>
                   <SidebarMenuButton
-                    className={`font-medium ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    isActive={pathname === item.href}
+                    className={`font-medium`}
+                    isActive={pathname.startsWith(item.href)} // Use startsWith for dynamic routes
                     tooltip={item.label}
-                    aria-disabled={item.disabled}
-                    disabled={item.disabled}
                   >
                     <item.icon className="h-5 w-5" />
                     <span className="text-sm">{item.label}</span>
@@ -191,7 +202,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-40 flex items-center justify-between h-16 px-4 bg-background/80 backdrop-blur-sm border-b shadow-light sm:px-6">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="md:hidden" />
-            {/* Breadcrumbs or page title could go here */}
           </div>
 
           <div className="flex items-center gap-4">

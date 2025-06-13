@@ -5,23 +5,25 @@ import React from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { SessionCard, type Session } from "@/components/shared/session-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ClipboardList, Edit3 } from "lucide-react"; // Using ClipboardList for the "no sessions" icon
+import { ClipboardList, Edit3, PlusCircle } from "lucide-react"; 
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
-// Mock data for coach's logged sessions
-const mockCoachSessions: Session[] = [
+// Mock data for coach's logged sessions, now including clientId
+const mockCoachSessions: Array<Session & { clientId: string }> = [
   { 
     id: 'coach_s1', 
+    clientId: 'client_1',
     clientName: 'Alice Wonderland', 
     sessionDate: '2024-07-20', 
     sessionType: 'Full', 
     summary: 'Focused on goal setting and weekly planning. Alice is making good progress towards her Q3 objectives. Key actions: Finalize project proposal, schedule stakeholder meeting.',
     videoLink: 'https://example.com/recording_coach_alice',
-    status: 'Logged', // Status from coach's perspective
+    status: 'Logged', 
   },
   { 
     id: 'coach_s2', 
+    clientId: 'client_2',
     clientName: 'Bob The Builder', 
     sessionDate: '2024-07-18', 
     sessionType: 'Half', 
@@ -30,6 +32,16 @@ const mockCoachSessions: Session[] = [
   },
   { 
     id: 'coach_s3', 
+    clientId: 'client_1', // Alice has another session
+    clientName: 'Alice Wonderland', 
+    sessionDate: '2024-07-10', 
+    sessionType: 'Half', 
+    summary: 'Follow-up on stakeholder meeting. Discussed feedback and next steps for proposal refinement.',
+    status: 'Logged',
+  },
+  { 
+    id: 'coach_s4', 
+    clientId: 'client_3',
     clientName: 'Charlie Brown', 
     sessionDate: '2024-07-15', 
     sessionType: 'Full', 
@@ -41,7 +53,6 @@ const mockCoachSessions: Session[] = [
 
 export default function CoachMySessionsPage() {
   const handleEditSession = (sessionId: string) => {
-    // In a real app, this would navigate to an edit page for the session
     alert(`Navigating to edit session: ${sessionId}`);
     // router.push(`/coach/edit-session/${sessionId}`);
   };
@@ -50,10 +61,13 @@ export default function CoachMySessionsPage() {
     <div>
       <PageHeader 
         title="My Logged Sessions" 
-        description="Review and manage your past coaching sessions."
+        description="Review and manage all your past coaching sessions."
         actions={
           <Button asChild>
-            <Link href="/coach/log-session">Log New Session</Link>
+            <Link href="/coach/log-session">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Log New Session
+            </Link>
           </Button>
         }
       />
@@ -72,7 +86,6 @@ export default function CoachMySessionsPage() {
             <div key={session.id} className="flex flex-col">
               <SessionCard 
                 session={session}
-                // coachName is not needed here as it's the coach's own view
               />
               <Button 
                 variant="outline" 
