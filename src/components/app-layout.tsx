@@ -70,7 +70,7 @@ const navItems: NavItem[] = [
   { href: '/coach/my-clients', label: 'My Clients', icon: Users, roles: ['coach'] },
 
   { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: true },
-  { href: '/client/history', label: 'Session History', icon: History, roles: ['client'] },
+  { href: '/client/history', label: 'Session History', icon: History, roles: ['client'], disabled: false },
   { href: '/client/profile', label: 'My Profile', icon: UserCircle, roles: ['client'], disabled: true },
 ];
 
@@ -122,16 +122,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const filteredNavItems = navItems.filter(item => {
     if (item.roles.includes(role)) {
-      return !item.disabled; // Only include if not disabled
+      return !item.disabled; 
     }
-    // For admin, include if not explicitly disabled. This logic might need refinement based on exact requirements.
-    // The current logic: if it's an admin route and not disabled, show it.
-    // If it's a route for another role, it must include 'admin' in its roles to be shown to admin.
-    // This maintains that admin sees its own, plus non-disabled coach/client routes if 'admin' is in their 'roles' array.
-    // For simplicity, let's assume admin only sees routes explicitly marked for 'admin'.
-    // The original line was: navItems.filter(item => item.roles.includes(role) || (role === 'admin' && !item.disabled));
-    // Correcting to ensure admin only sees admin roles OR enabled shared roles (if any).
-    // The simplest is: only show if the role matches and it's not disabled.
     return item.roles.includes(role) && !item.disabled;
   });
 
@@ -172,11 +164,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <SidebarContent>
           <SidebarMenu>
             {filteredNavItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
+               <SidebarMenuItem key={item.href}>
                 <Link href={item.href}>
                   <SidebarMenuButton
                     className={`font-medium`}
-                    isActive={pathname.startsWith(item.href)} // Use startsWith for dynamic routes
+                    isActive={pathname.startsWith(item.href)}
                     tooltip={item.label}
                   >
                     <item.icon className="h-5 w-5" />

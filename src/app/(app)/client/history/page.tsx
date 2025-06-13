@@ -1,4 +1,5 @@
-'use client'; // For potential interactivity with SessionCard actions
+
+'use client'; 
 
 import React from 'react';
 import { PageHeader } from "@/components/shared/page-header";
