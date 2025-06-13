@@ -160,7 +160,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <SidebarMenu>
             {filteredNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.disabled ? '#' : item.href} legacyBehavior passHref>
+                <Link href={item.disabled ? '#' : item.href}>
                   <SidebarMenuButton
                     className={`font-medium ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     isActive={pathname === item.href}
