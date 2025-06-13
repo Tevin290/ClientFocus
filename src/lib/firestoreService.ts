@@ -2,7 +2,7 @@
 'use server';
 
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
+import { db, isFirebaseConfigured, auth } from './firebase'; // Added auth import for logging
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
@@ -57,12 +57,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       // Ensure role is valid or null
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
       return {
-        uid, // Ensure uid from the doc id is preferred or consistent
+        uid, 
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL,
-        createdAt: data.createdAt, // This should be a Firestore Timestamp
+        createdAt: data.createdAt, 
         coachId: data.coachId,
         stripeCustomerId: data.stripeCustomerId,
       } as UserProfile;
@@ -71,8 +71,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     return null;
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
-    const baseMessage = `Failed to fetch user profile for UID ${uid}.`;
-    let detailedMessage = baseMessage;
+    let detailedMessage = `Failed to fetch user profile for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
     else detailedMessage += ` An unknown error occurred.`;
@@ -88,18 +87,27 @@ export async function createUserProfileInFirestore(uid: string, profileData: Omi
   ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
-    // Ensure createdAt is handled correctly: use provided one or serverTimestamp
     const dataToSet = {
       ...profileData,
-      uid, // Explicitly set uid in the document data as well
+      uid, 
       createdAt: profileData.createdAt instanceof Timestamp ? profileData.createdAt : serverTimestamp(),
     };
+
+    console.log('[firestoreService] Attempting to create user profile for UID:', uid);
+    console.log('[firestoreService] Data to write:', JSON.stringify(dataToSet, null, 2));
+    // Note: auth.currentUser here is client-side state if this function is called from client.
+    // Security rules use server-side request.auth.
+    if (auth.currentUser) {
+        console.log('[firestoreService] Current Firebase Auth user (client-side):', auth.currentUser.uid, auth.currentUser.email);
+    } else {
+        console.log('[firestoreService] No Firebase Auth user currently signed in (client-side view). This is unexpected if called after signup.');
+    }
+
     await setDoc(userDocRef, dataToSet);
-    console.log(`User profile created/updated in Firestore for UID: ${uid}`);
+    console.log(`[firestoreService] User profile created/updated in Firestore for UID: ${uid}`);
   } catch (error: any) {
-    console.error(`Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
-    const baseMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;
-    let detailedMessage = baseMessage;
+    console.error(`[firestoreService] Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
+    let detailedMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
     else detailedMessage += ` An unknown error occurred.`;
