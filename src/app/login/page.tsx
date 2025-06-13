@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRole, type UserRole } from '@/context/role-context';
 import { Button } from '@/components/ui/button';
@@ -10,11 +11,10 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { LifeBuoy, AlertTriangle } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth, isFirebaseConfigured } from '@/lib/firebase'; // Import auth and checker
+import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 
-// Define dummy credentials (ensure these users exist in Firebase Auth)
-const DUMMY_CREDENTIALS: Record<UserRole & string, { email: string; pass: string }> = {
+const DUMMY_CREDENTIALS: Record<Exclude<UserRole, null> & string, { email: string; pass: string }> = {
   admin: { email: 'admin@example.com', pass: 'password123' },
   coach: { email: 'coach@example.com', pass: 'password123' },
   client: { email: 'client@example.com', pass: 'password123' },
@@ -41,8 +41,6 @@ export default function LoginPage() {
   }, [toast]);
 
   useEffect(() => {
-    // If user is authenticated and role is determined, redirect.
-    // The RoleContext now handles redirection based on auth state and role from Firestore.
     if (!isRoleLoading && user && role) {
       router.push(`/${role}/dashboard`);
     }
@@ -61,7 +59,7 @@ export default function LoginPage() {
 
     if (selectedRole && selectedRole !== '') {
       setIsLoggingIn(true);
-      const creds = DUMMY_CREDENTIALS[selectedRole];
+      const creds = DUMMY_CREDENTIALS[selectedRole as Exclude<UserRole, null>];
       if (!creds) {
         toast({ title: 'Error', description: 'Invalid role selection for dummy login.', variant: 'destructive' });
         setIsLoggingIn(false);
@@ -70,9 +68,6 @@ export default function LoginPage() {
 
       try {
         await signInWithEmailAndPassword(auth, creds.email, creds.pass);
-        // Successful login, onAuthStateChanged in RoleContext will take over.
-        // It will fetch profile, set role, and redirect.
-        // No need to manually setRole or router.push here anymore.
         toast({ title: 'Login Successful', description: `Logging in as ${selectedRole}...` });
       } catch (error: any) {
         console.error('Firebase Login Error:', error);
@@ -90,7 +85,6 @@ export default function LoginPage() {
   };
 
   if (isRoleLoading || (user && role)) {
-    // Show loading or nothing if already logged in and redirecting (handled by RoleContext)
     return <div className="flex items-center justify-center min-h-screen bg-background"><p>Loading...</p></div>;
   }
 
@@ -134,9 +128,12 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="text-center text-xs text-muted-foreground flex flex-col gap-1">
-          <p>This uses pre-defined credentials for demo purposes.</p>
-          <p>Ensure Firebase is configured and dummy users exist in Firebase Auth.</p>
+        <CardFooter className="flex flex-col items-center justify-center text-sm">
+          <Link href={selectedRole ? `/signup?role=${selectedRole}` : "/signup"} className="text-primary hover:underline">
+            Don&apos;t have an account? Sign Up
+          </Link>
+          <p className="mt-2 text-xs text-muted-foreground">This uses pre-defined credentials for demo purposes.</p>
+          <p className="text-xs text-muted-foreground">Ensure Firebase is configured and dummy users exist in Firebase Auth.</p>
         </CardFooter>
       </Card>
     </div>
