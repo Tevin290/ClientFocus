@@ -49,12 +49,12 @@ export interface NewSessionData {
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   ensureFirebaseIsOperational();
-  console.log(`[firestoreService] getUserProfile called for UID: ${uid}`);
-  if (auth.currentUser) {
-    console.log(`[firestoreService] Current auth.currentUser.uid in getUserProfile: ${auth.currentUser.uid}`);
-  } else {
-    console.log(`[firestoreService] No auth.currentUser in getUserProfile when fetching for: ${uid}`);
-  }
+  console.log(`[firestoreService] getUserProfile called for UID: ${uid}. Current auth UID: ${auth.currentUser?.uid}`);
+  // if (auth.currentUser) {
+  //   console.log(`[firestoreService] Current auth.currentUser.uid in getUserProfile: ${auth.currentUser.uid}`);
+  // } else {
+  //   console.log(`[firestoreService] No auth.currentUser in getUserProfile when fetching for: ${uid}`);
+  // }
   try {
     const userDocRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userDocRef);
@@ -64,12 +64,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
       console.log(`[firestoreService] Profile found for UID ${uid}, role: ${role}`);
       return {
-        uid,
+        uid, // ensure uid from doc path is used if it's the primary key, or from data if stored within
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL,
-        createdAt: data.createdAt,
+        createdAt: data.createdAt, // This should be a Firestore Timestamp
         coachId: data.coachId,
         stripeCustomerId: data.stripeCustomerId,
       } as UserProfile;
@@ -84,26 +84,43 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     else detailedMessage += ` An unknown error occurred.`;
 
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw new Error(error.message); // Re-throw specific configuration errors
+      throw error; // Re-throw specific configuration errors
     }
     throw new Error(detailedMessage);
   }
 }
 
-export async function createUserProfileInFirestore(uid: string, profileData: Omit<UserProfile, 'uid' | 'createdAt'> & {createdAt?: any}): Promise<void> {
+// profileData will contain email, displayName, role, and optionally photoURL from the signup form
+export async function createUserProfileInFirestore(
+  uid: string, // UID from Firebase Auth
+  profileData: Omit<UserProfile, 'uid' | 'createdAt'> & {createdAt?: any} // Contains email, displayName, role, photoURL?
+): Promise<void> {
   ensureFirebaseIsOperational();
   try {
     const userDocRef = doc(db, 'users', uid);
-    // This is the data that will be written to Firestore
-    const dataToSet = {
-      ...profileData,
-      uid, // Ensure the UID from auth is part of the document data
-      createdAt: profileData.createdAt instanceof Timestamp ? profileData.createdAt : serverTimestamp(),
+
+    // Explicitly construct the object to be written to Firestore
+    // This ensures that the `uid` field in the document data is the one from Firebase Auth
+    const dataToSet: UserProfile = {
+      uid: uid, // This is request.auth.uid in security rules context
+      email: profileData.email,
+      displayName: profileData.displayName,
+      role: profileData.role,
+      photoURL: profileData.photoURL || undefined, // Set to undefined if not provided
+      createdAt: serverTimestamp() as Timestamp, // Firestore server timestamp
+      // coachId and stripeCustomerId will be undefined unless explicitly set later
     };
 
     console.log('[firestoreService] Attempting to create user profile for UID (argument):', uid);
     console.log('[firestoreService] Profile data received (argument):', JSON.stringify(profileData, null, 2));
-    console.log('[firestoreService] FINAL dataToSet being written to Firestore:', JSON.stringify(dataToSet, null, 2)); // VERY IMPORTANT LOG
+    console.log('[firestoreService] FINAL dataToSet being written to Firestore:', JSON.stringify(dataToSet, (key, value) => {
+      // Crude way to represent serverTimestamp in log, Firestore handles it specially
+      if (typeof value === 'object' && value !== null && value.constructor && value.constructor.name === 'TimestampFieldValue') {
+        return '(ServerTimestamp)';
+      }
+      return value;
+    }, 2));
+
 
     if (auth.currentUser) {
         console.log('[firestoreService] Current Firebase Auth user (client-side) before setDoc:', auth.currentUser.uid, auth.currentUser.email, 'Display Name:', auth.currentUser.displayName);
@@ -323,3 +340,5 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(detailedMessage);
   }
 }
+
+    
