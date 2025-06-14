@@ -1,24 +1,20 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rules for user profiles
     match /users/{userId} {
-      // Allow a user to create their own profile document if:
+      // Allow a user to CREATE their own profile document if:
       // 1. They are authenticated (request.auth.uid is not null).
-      // 2. The document ID ({userId}) matches their own authenticated UID (request.auth.uid).
-      // 3. The UID in the document they are attempting to create (request.resource.data.uid)
-      //    also matches their own authenticated UID (request.auth.uid).
-      // 4. The email in the document (request.resource.data.email) matches their authenticated email.
-      // 5. The role assignment is valid:
-      //    - 'client' role can be assigned to anyone.
-      //    - 'coach' or 'admin' roles can only be assigned if the authenticated user's email
-      //      belongs to the '@hmperform.com' domain.
-      // 6. All required fields (uid, email, displayName, role, createdAt) are present.
+      // 2. The document ID ({userId}) they are creating matches their authenticated UID.
+      // 3. The 'uid' field within the document data also matches their authenticated UID.
+      // 4. The 'email' field within the document data matches their authenticated email.
+      // 5. Role assignment is valid:
+      //    - 'client' role is always allowed.
+      //    - 'coach' or 'admin' roles are only allowed if the authenticated email is from '@hmperform.com'.
+      // 6. All required fields ('uid', 'email', 'displayName', 'role', 'createdAt') are present.
       allow create: if request.auth != null &&
-                       userId == request.auth.uid &&
+                       request.auth.uid == userId &&
                        request.resource.data.uid == request.auth.uid &&
                        request.resource.data.email == request.auth.token.email &&
                        (
@@ -28,44 +24,31 @@ service cloud.firestore {
                            request.auth.token.email.matches('.*@hmperform\\.com$')
                          )
                        ) &&
-                       request.resource.data.keys().hasAll(['uid','email','displayName','role','createdAt']);
+                       request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt']);
 
-      // Allow a user to read their own profile document if:
+      // Allow a user to READ their own profile document if:
       // 1. They are authenticated (request.auth.uid is not null).
-      // 2. The UID in the path of the document they are trying to read ({userId})
-      //    matches their own authenticated UID (request.auth.uid).
+      // 2. The document ID ({userId}) they are trying to read matches their authenticated UID.
       allow read: if request.auth.uid != null &&
                      request.auth.uid == userId;
 
-      // Allow a user to update their own profile document if:
+      // Allow a user to UPDATE their own profile document if:
       // 1. They are authenticated.
-      // 2. The UID in the path matches their authenticated UID.
-      // 3. Prevent them from changing their UID or role via a client-side update.
-      //    (Other fields like displayName, photoURL could be allowed).
+      // 2. The document ID ({userId}) matches their authenticated UID.
+      // 3. They are not trying to change their 'uid' or 'role' field.
       allow update: if request.auth.uid != null &&
                        request.auth.uid == userId &&
                        request.resource.data.uid == resource.data.uid &&
-                       request.resource.data.role == resource.data.role &&
-                       request.resource.data.email == resource.data.email && // Prevent email change here for simplicity
-                       request.resource.data.createdAt == resource.data.createdAt; // Prevent createdAt change
+                       request.resource.data.role == resource.data.role;
 
-      // Generally, disallow client-side deletion of user profiles.
+      // Disallow client-side deletion of user profiles.
       allow delete: if false;
     }
 
-    // Rules for sessions (example, adjust as needed)
     match /sessions/{sessionId} {
       // Example: Allow authenticated users to read and write sessions.
-      // You'll likely want more specific rules here based on coachId, clientId, roles etc.
-      // For now, keeping it simple for testing user creation.
+      // Adjust with more specific rules based on coachId, clientId, roles etc. as needed.
       allow read, write: if request.auth.uid != null;
     }
-
-    // Add other collection rules below if needed
-    // e.g., match /yourOtherCollection/{documentId} {
-    //   allow read, write: if <condition>;
-    // }
   }
 }
-
-    
