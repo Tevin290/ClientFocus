@@ -26,15 +26,16 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building } from 'lucide-react';
 
-import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth'; // Import FirebaseUser
+import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { createUserProfileInFirestore, type MinimalProfileDataForCreation } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
-// Admin emails (defaulting if env var is not set)
+// Default admin email if env var is not set.
+// In a real app, manage this list securely, possibly via server-side config or a database.
 const ADMIN_EMAILS = (
   process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['hello@hmperform.com']
 );
@@ -48,7 +49,7 @@ const signupFormSchema = z
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match.",
-    path: ['confirmPassword'], 
+    path: ['confirmPassword'],
   });
 
 type SignupFormValues = z.infer<typeof signupFormSchema>;
@@ -58,7 +59,7 @@ export default function SignupPage() {
   const { toast } = useToast();
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [firebaseNotConfigured, setFirebaseNotConfigured] = useState(false);
-  const [assignedRoleForDisplay, setAssignedRoleForDisplay] = useState<UserRole | null>(null);
+  const [autoAssignedRole, setAutoAssignedRole] = useState<UserRole | null>(null);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupFormSchema),
@@ -68,7 +69,7 @@ export default function SignupPage() {
       password: '',
       confirmPassword: '',
     },
-    mode: 'onChange', 
+    mode: 'onChange',
   });
 
   const emailValue = form.watch('email');
@@ -78,7 +79,7 @@ export default function SignupPage() {
       setFirebaseNotConfigured(true);
       toast({
         title: 'Firebase Not Configured',
-        description: 'Please configure Firebase in src/lib/firebase.ts to enable sign up.',
+        description: 'Sign up is disabled. Please configure Firebase.',
         variant: 'destructive',
         duration: Infinity,
       });
@@ -86,26 +87,35 @@ export default function SignupPage() {
   }, [toast]);
 
   useEffect(() => {
-    // Determine and display the auto-assigned role based on email
     if (emailValue && z.string().email().safeParse(emailValue).success) {
       const normalizedEmail = emailValue.toLowerCase();
       if (ADMIN_EMAILS.includes(normalizedEmail)) {
-        setAssignedRoleForDisplay('admin');
+        setAutoAssignedRole('admin');
       } else if (normalizedEmail.endsWith('@hmperform.com')) {
-        setAssignedRoleForDisplay('coach');
+        setAutoAssignedRole('coach');
       } else {
-        setAssignedRoleForDisplay('client');
+        setAutoAssignedRole('client');
       }
     } else {
-      setAssignedRoleForDisplay(null);
+      setAutoAssignedRole(null);
     }
   }, [emailValue]);
+
+  const getRoleIcon = (role: UserRole | null) => {
+    if (!role) return <Mail className="h-4 w-4 text-muted-foreground" />;
+    switch (role) {
+      case 'admin': return <ShieldCheck className="h-4 w-4 text-primary" />;
+      case 'coach': return <Briefcase className="h-4 w-4 text-blue-500" />;
+      case 'client': return <User className="h-4 w-4 text-green-500" />;
+      default: return <User className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
 
   const onSubmit: SubmitHandler<SignupFormValues> = async (data) => {
     if (firebaseNotConfigured) {
       toast({
         title: 'Sign Up Disabled',
-        description: 'Firebase is not configured. Cannot create account.',
+        description: 'Firebase is not configured.',
         variant: 'destructive',
       });
       return;
@@ -113,8 +123,8 @@ export default function SignupPage() {
 
     setIsSigningUp(true);
 
-    const normalizedEmail = data.email.toLowerCase();
     let assignedRole: Exclude<UserRole, null>;
+    const normalizedEmail = data.email.toLowerCase();
 
     if (ADMIN_EMAILS.includes(normalizedEmail)) {
       assignedRole = 'admin';
@@ -133,55 +143,46 @@ export default function SignupPage() {
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const firebaseUser = userCredential.user; // This is the FirebaseUser object
+      const firebaseUser = userCredential.user;
 
-      if (firebaseUser) {
-        console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}`);
-        await updateProfile(firebaseUser, { displayName: data.displayName });
-        console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
-
-        console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid} with data:`, JSON.stringify(profileDataForFirestore));
-        // Pass the entire firebaseUser object
-        await createUserProfileInFirestore(firebaseUser, profileDataForFirestore); 
-        console.log(`[SignupPage] createUserProfileInFirestore successful for UID: ${firebaseUser.uid}`);
-
-        toast({
-          title: 'Account Created!',
-          description: 'Your account has been successfully created. Please log in.',
-        });
-        router.push('/login');
-      } else {
+      if (!firebaseUser) {
         throw new Error('User creation failed in Firebase Auth (firebaseUser was null).');
       }
-    } catch (error: any) {
-      console.error('[SignupPage] Sign Up Error:', error.message, error.code ? `Code: ${error.code}`: '', error);
       
-      let errorMessage = 'Sign up failed – check email domain or try again.'; // Default more specific message
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email address is already in use.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'The password is too weak.';
-      } else if (error.message && error.message.startsWith('[firestoreService]')) {
-        // If it's one of our custom errors from firestoreService, use its message
-        errorMessage = error.message;
-      } else if (error.message && error.message.includes("PERMISSION_DENIED")) {
-         errorMessage = "Signup failed due to permissions. Please contact support.";
+      console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}`);
+      await updateProfile(firebaseUser, { displayName: data.displayName });
+      console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
+      
+      console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid} with data:`, JSON.stringify(profileDataForFirestore));
+      await createUserProfileInFirestore(firebaseUser, profileDataForFirestore);
+      console.log(`[SignupPage] createUserProfileInFirestore successful for UID: ${firebaseUser.uid}`);
+
+      toast({
+        title: 'Account Created!',
+        description: 'Your account has been successfully created. Please log in.',
+      });
+      router.push('/login');
+
+    } catch (error: any) {
+      // Simplified error logging to prevent "Maximum call stack size exceeded"
+      const errorMessage = error.message || 'An unknown error occurred during signup.';
+      const errorCode = error.code || 'UNKNOWN_ERROR';
+      console.error(`[SignupPage] Sign Up Error: ${errorMessage}`, `Code: ${errorCode}`);
+      
+      let toastMessage = 'Signup failed. Please try again.';
+      if (errorCode === 'auth/email-already-in-use') {
+        toastMessage = 'This email address is already in use.';
+      } else if (errorCode === 'auth/weak-password') {
+        toastMessage = 'The password is too weak.';
+      } else if (errorMessage.includes("PERMISSION_DENIED")) {
+         toastMessage = "Signup failed due to permissions. Please contact support.";
+      } else if (errorMessage.includes("Authentication state error")) {
+        toastMessage = "Signup failed due to an authentication issue. Please try again.";
       }
 
-
-      toast({ title: 'Sign Up Failed', description: errorMessage, variant: 'destructive' });
+      toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
-    }
-  };
-
-  const getRoleIcon = (role: UserRole | null) => {
-    if (!role) return <Mail className="h-4 w-4 text-muted-foreground" />;
-    switch (role) {
-      case 'admin': return <ShieldCheck className="h-4 w-4 text-primary" />;
-      case 'coach': return <Briefcase className="h-4 w-4 text-blue-500" />;
-      case 'client': return <User className="h-4 w-4 text-green-500" />;
-      default: return <User className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
@@ -190,13 +191,13 @@ export default function SignupPage() {
       <Card className="w-full max-w-lg shadow-xl rounded-xl border-border/50">
         <CardHeader className="text-center p-8">
           <Link href="/" className="flex items-center justify-center gap-2 mb-6">
-            <UserPlus className="h-12 w-12 text-primary" />
+            <Building className="h-10 w-10 text-primary" /> {/* Replaced UserPlus with Building */}
           </Link>
           <CardTitle className="text-3xl font-headline text-foreground">
-            Create Your SessionSync Account
+            Join SessionSync
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-1">
-            Join the platform to streamline your coaching workflow.
+            Create your account to get started.
           </CardDescription>
           {firebaseNotConfigured && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive text-sm rounded-md flex items-center gap-2">
@@ -242,10 +243,10 @@ export default function SignupPage() {
                         className="bg-background/70 border-input focus:border-primary"
                       />
                     </FormControl>
-                     {assignedRoleForDisplay && (
+                     {autoAssignedRole && (
                       <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5 pl-1">
-                        {getRoleIcon(assignedRoleForDisplay)}
-                        Your auto-assigned role will be: <span className="font-semibold capitalize">{assignedRoleForDisplay}</span>
+                        {getRoleIcon(autoAssignedRole)}
+                        Your auto-assigned role will be: <span className="font-semibold capitalize">{autoAssignedRole}</span>
                       </p>
                     )}
                     <FormMessage />
@@ -327,4 +328,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -9,41 +10,41 @@ service cloud.firestore {
       // ── CREATE ──
       //  • Authenticated user only
       //  • Doc ID must equal auth.uid
-      //  • Field uid must equal auth.uid
-      //  • Field email must match auth.token.email
+      //  • Email in document must match auth token email
       //  • Role rules:
       //      - 'client' → always allowed
-      //      - 'coach' | 'admin' → only if email ends with @hmperform.com AND email is verified
-      //  • Required keys: uid, email, displayName, role, createdAt
+      //      - 'coach' | 'admin' → only if email ends with @hmperform.com
+      //  • Required keys: email, displayName, role, createdAt
       allow create: if request.auth != null
                     && userId == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid
-                    && request.resource.data.email == request.auth.token.email // Ensure email matches
+                    && request.resource.data.email == request.auth.token.email
                     && (
                          request.resource.data.role == 'client'
                          || (
                               (request.resource.data.role in ['coach', 'admin'])
                               && request.auth.token.email.matches('.*@hmperform\\.com$')
-                              && request.auth.token.email_verified == true // Added explicit check
                          )
                        )
-                    // Ensuring all keys are present, INCLUDING createdAt as per your successful Playground test.
-                    && request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt']);
+                    && request.resource.data.keys()
+                         .hasAll(['email', 'displayName', 'role', 'createdAt']);
 
       // ── READ ──
       //  • User may read their own document
       allow read: if request.auth != null
-                  && request.auth.uid == userId;
+                  && userId == request.auth.uid;
 
       // ── UPDATE ──
       //  • User may update their own document
-      //  • Cannot change uid, role, email, or createdAt
+      //  • Cannot change role, email, or createdAt directly by client
+      //  (UID is not in the data, so no check for it here)
       allow update: if request.auth != null
-                    && request.auth.uid == userId
-                    && request.resource.data.uid       == resource.data.uid
+                    && userId == request.auth.uid
                     && request.resource.data.role      == resource.data.role
                     && request.resource.data.email     == resource.data.email
                     && request.resource.data.createdAt == resource.data.createdAt;
+                    // Note: If displayName is the only mutable field by user, you might restrict further.
+                    // Example: allow update: if request.auth.uid == userId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL']);
+
 
       // ── DELETE ──
       //  • Client-side deletion not allowed
@@ -51,15 +52,20 @@ service cloud.firestore {
     }
 
     /* ──────────────── SESSIONS COLLECTION ──────────────── */
+    // Adjust later with finer-grained coach / client logic
     match /sessions/{sessionId} {
       allow read, write: if request.auth != null;
     }
 
     /* ──────────────── APP SETTINGS DOCS ──────────────── */
     match /appSettings/{settingsId} {
+      // Any signed-in user can read app settings
       allow read: if request.auth != null;
+
+      // Only admins may write
       allow write: if request.auth != null
-                   && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+                   && get(/databases/$(database)/documents/users/$(request.auth.uid))
+                        .data.role == 'admin';
     }
   }
 }
