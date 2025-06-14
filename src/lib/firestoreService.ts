@@ -2,11 +2,10 @@
 'use server';
 
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase';
+import { db, isFirebaseConfigured, auth } from './firebase'; // auth is imported here
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
-// Helper function to ensure Firebase is configured and db is available
 function ensureFirebaseIsOperational() {
   if (!isFirebaseConfigured()) {
     const errorMessage = "Firebase is not configured. Please add your Firebase config to src/lib/firebase.ts or environment variables.";
@@ -25,19 +24,18 @@ export interface UserProfile {
   email: string;
   displayName: string;
   role: UserRole;
-  photoURL?: string | null; // Optional: URL to user's photo
-  createdAt: Timestamp;    // Firestore Timestamp for read
-  coachId?: string;         // Optional: For clients, the UID of their coach
-  stripeCustomerId?: string; // Optional: For Stripe integration
+  photoURL?: string | null;
+  createdAt: Timestamp; 
+  coachId?: string;
+  stripeCustomerId?: string;
 }
 
-// Type for the minimal data received from the signup form for profile creation
 export type MinimalProfileDataForCreation = {
   email: string;
   displayName: string;
   role: UserRole;
-  // photoURL is intentionally omitted here as it's not part of the signup form
-  // and was causing 'undefined' issues if not explicitly handled.
+  // photoURL and other optional fields are intentionally omitted here
+  // to ensure only minimal data from the signup form is passed.
 };
 
 
@@ -55,11 +53,9 @@ export interface NewSessionData {
   status: 'Logged' | 'Reviewed' | 'Billed';
 }
 
-// --- User Management ---
-
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   ensureFirebaseIsOperational();
-  // console.log(`[firestoreService] getUserProfile called for UID: ${uid}.`);
+  console.log(`[firestoreService] getUserProfile called for UID: ${uid}. Path: users/${uid}`);
 
   try {
     const userDocRef = doc(db, 'users', uid);
@@ -67,7 +63,6 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     if (userSnap.exists()) {
       const data = userSnap.data();
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
-      // console.log(`[firestoreService] Profile found for UID ${uid}, role: ${role}`);
       
       const profile: UserProfile = {
         uid,
@@ -81,7 +76,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       };
       return profile;
     }
-    // console.log(`[firestoreService] No user profile found for UID: ${uid}`);
+    console.log(`[firestoreService] No user profile found for UID: ${uid}`);
     return null;
   } catch (error: any) {
     console.error(`[firestoreService] Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
@@ -102,48 +97,57 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 export async function createUserProfileInFirestore(
   uid: string,
-  profileDataFromSignup: MinimalProfileDataForCreation
+  profileData: MinimalProfileDataForCreation // Use the more specific type
 ): Promise<void> {
   ensureFirebaseIsOperational();
   console.log(`[firestoreService] createUserProfileInFirestore called with UID argument: ${uid}`);
-  console.log(`[firestoreService] createUserProfileInFirestore received minimal profileData:`, JSON.stringify(profileDataFromSignup, null, 2));
+  console.log(`[firestoreService] createUserProfileInFirestore received profileData (from signup form):`, JSON.stringify(profileData, null, 2));
 
   try {
     const userDocRef = doc(db, 'users', uid);
+    console.log(`[firestoreService] Document reference for new user: users/${uid}`);
 
-    // Construct the minimal, explicit object to be written to Firestore
-    // Only include fields that are guaranteed to have valid values.
-    // photoURL, coachId, stripeCustomerId are intentionally omitted here
-    // as they are not part of the initial MinimalProfileDataForCreation.
-    // They can be added later via an updateProfile function if needed.
+    // Construct the minimal, explicit object to be written to Firestore.
+    // This ensures only required fields and the passed uid are included.
     const dataForFirestore: {
-      uid: string;
+      uid: string; // Crucial: This field must match request.auth.uid for the simplest rule
       email: string;
       displayName: string;
       role: UserRole;
       createdAt: FieldValue;
-      // photoURL is omitted: if needed, it should be set via updateProfile or be nullable with explicit null
+      // photoURL, coachId, stripeCustomerId are intentionally omitted from this initial create.
+      // They can be added later via an updateProfile function if needed.
     } = {
-      uid: uid, 
-      email: profileDataFromSignup.email,
-      displayName: profileDataFromSignup.displayName,
-      role: profileDataFromSignup.role,
+      uid: uid,
+      email: profileData.email,
+      displayName: profileData.displayName,
+      role: profileData.role,
       createdAt: serverTimestamp(),
     };
     
+    console.log(`[firestoreService] UID for document path: users/${uid}`);
+    console.log(`[firestoreService] UID from auth argument for data: ${uid}`);
+    console.log(`[firestoreService] UID field in dataForFirestore object: ${dataForFirestore.uid}`);
     console.log(`[firestoreService] FINAL dataForFirestore being written (minimal):`, JSON.stringify(dataForFirestore, (key, value) => {
       if (typeof value === 'object' && value !== null && value.constructor && value.constructor.name === 'FieldValue') {
         return '(ServerTimestamp)';
       }
       return value;
     }, 2));
-    
-    if (auth.currentUser && auth.currentUser.uid !== uid) {
-        console.warn(`[firestoreService] MISMATCH! auth.currentUser.uid (${auth.currentUser.uid}) is different from uid argument (${uid}) for createUserProfileInFirestore just before setDoc.`);
-    }
 
+    // Log current auth state from the SDK instance right before setDoc
+    if (auth.currentUser) {
+        console.log(`[firestoreService] Current auth.currentUser.uid just before setDoc: ${auth.currentUser.uid}`);
+        if (auth.currentUser.uid !== uid) {
+            console.warn(`[firestoreService] MISMATCH! auth.currentUser.uid (${auth.currentUser.uid}) is different from uid argument (${uid}) for setDoc.`);
+        }
+    } else {
+        console.warn('[firestoreService] auth.currentUser is null just before setDoc. This is unexpected if called after successful signup.');
+    }
+    
     await setDoc(userDocRef, dataForFirestore);
-    // console.log(`[firestoreService] User profile (minimal) should be CREATED/UPDATED in Firestore for UID: ${uid}`);
+    console.log(`[firestoreService] User profile (minimal) should be CREATED in Firestore for UID: ${uid}`);
+
   } catch (error: any) {
     console.error(`[firestoreService] Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
     let detailedMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;
@@ -160,13 +164,10 @@ export async function createUserProfileInFirestore(
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
       throw error;
     }
-    console.error('[firestoreService] Data that was attempted to be written (and caused error):', JSON.stringify(profileDataFromSignup, null, 2));
+    console.error('[firestoreService] Data that was attempted to be written (and caused error):', JSON.stringify(profileData, null, 2));
     throw new Error(detailedMessage);
   }
 }
-
-
-// --- Session Management ---
 
 export async function getClientSessions(clientId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
@@ -179,7 +180,6 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
-        // console.log(`No sessions found for client ID: ${clientId}`);
         return [];
     }
     return snapshot.docs.map(doc => {
@@ -216,7 +216,6 @@ export async function getCoachSessions(coachId: string): Promise<Session[]> {
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
-        // console.log(`No sessions found for coach ID: ${coachId}`);
         return [];
     }
     return snapshot.docs.map(docData => {
@@ -252,7 +251,6 @@ export async function logSession(sessionData: NewSessionData): Promise<string> {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    // console.log(`Session logged with ID: ${docRef.id}`);
     return docRef.id;
   } catch (error: any)
  {
@@ -283,7 +281,6 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
         sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     }
-    // console.log(`No session found with ID: ${sessionId}`);
     return null;
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getSessionById for sessionID ${sessionId}:`, error);
@@ -311,7 +308,6 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
     }
 
     await updateDoc(sessionDocRef, updateData);
-    // console.log(`Session updated: ${sessionId}`);
   } catch (error: any) {
     console.error(`Detailed Firebase Error in updateSession for sessionID ${sessionId}:`, error);
     const baseMessage = `Failed to update session ${sessionId}.`;
@@ -334,7 +330,6 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     const q = query(sessionsCol, orderBy('sessionDate', 'desc'));
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
-      // console.log("No sessions found for admin.");
       return [];
     }
     return snapshot.docs.map(docData => {
@@ -359,4 +354,3 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(detailedMessage);
   }
 }
-

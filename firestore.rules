@@ -4,72 +4,78 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if the user is authenticated
-    function isAuthenticated() {
-      return request.auth != null && request.auth.uid != null;
-    }
-
-    // Helper function to check if the user is the owner of the document
+    // Helper functions
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
 
-    // Helper function to check email domain (kept for session rules)
-    function isHmPerformEmail() {
-      return request.auth.token.email != null && request.auth.token.email.matches('.*@hmperform\\.com$');
+    function isSignedIn() {
+      return request.auth.uid != null;
     }
 
-    // Users Collection
+    function getRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    function isRole(userId, roleName) {
+      return isSignedIn() && getRole(userId) == roleName;
+    }
+
     match /users/{userId} {
-      // VERY LENIENT CREATE RULE:
-      // User must be authenticated.
-      // The UID in the document being created MUST match the authenticated user's UID.
-      // The email in the document being created MUST match the authenticated user's email.
-      // No other restrictions on role or email domain for create.
-      allow create: if isAuthenticated() &&
-                       request.resource.data.uid == request.auth.uid &&
-                       request.resource.data.email == request.auth.token.email;
+      // CREATE:
+      // Allow any authenticated user to create their OWN user document,
+      // as long as the 'uid' field in the document matches their auth UID.
+      // The role can be set to anything during creation by this rule.
+      allow create: if isSignedIn() &&
+                       request.resource.data.uid == request.auth.uid;
 
-      // Allow read, update: User can read/update their own profile.
-      // Disallow role changes by the user themselves via update.
-      allow read: if isOwner(userId);
-      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role; // Prevent role change
+      // READ:
+      // Allow user to read their own profile.
+      // Allow admin to read any user profile.
+      allow read: if isSignedIn() && 
+                     (isOwner(userId) || isRole(request.auth.uid, 'admin'));
+      
+      // UPDATE:
+      // Allow user to update their own profile, but not change their role or UID.
+      // Allow admin to update any user profile (including role).
+      allow update: if isSignedIn() &&
+                       ((isOwner(userId) && 
+                         request.resource.data.uid == resource.data.uid && // UID cannot be changed
+                         request.resource.data.role == resource.data.role) || // Role cannot be changed by non-admin
+                        isRole(request.auth.uid, 'admin')); 
+                        // Admin can change anything, including role. UID is immutable by nature of path.
 
-      allow delete: if false; // Generally, disallow delete for user profiles
+      // DELETE: Generally disallow deletion. Admin might be an exception if needed.
+      allow delete: if false; 
     }
 
-    // Sessions Collection
     match /sessions/{sessionId} {
-      // Helper: Get user's role from their profile document
-      function getUserRole() {
-        // Ensure request.auth.uid is not null before using it in a get() path
-        if (request.auth == null || request.auth.uid == null) {
-          return null;
-        }
-        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-        if (userDoc.data == null) {
-          return null;
-        }
-        return userDoc.data.role;
+      // Session data being created
+      function isSessionCreator() {
+        return request.auth.uid == request.resource.data.coachId;
       }
 
+      // Existing session data
       function isSessionCoach() {
-        return getUserRole() == 'coach' && resource.data.coachId == request.auth.uid;
-      }
-      function isSessionClient() {
-        return getUserRole() == 'client' && resource.data.clientId == request.auth.uid;
-      }
-      function isAdmin() {
-        return getUserRole() == 'admin';
+        return request.auth.uid == resource.data.coachId;
       }
 
-      allow create: if isAuthenticated() && getUserRole() == 'coach' && request.resource.data.coachId == request.auth.uid;
-      allow read: if isAuthenticated() && (isAdmin() || isSessionCoach() || isSessionClient());
-      allow update: if isAuthenticated() && (
-                    isAdmin() ||
-                    (isSessionCoach() && resource.data.status == 'Logged')
-                  );
-      allow delete: if isAuthenticated() && isAdmin();
+      function isSessionClient() {
+        return request.auth.uid == resource.data.clientId;
+      }
+      
+      allow create: if isSignedIn() && isSessionCreator();
+
+      allow read: if isSignedIn() && 
+                     (isSessionCoach() || 
+                      isSessionClient() || 
+                      isRole(request.auth.uid, 'admin'));
+      
+      allow update: if isSignedIn() && 
+                       (isSessionCoach() || isRole(request.auth.uid, 'admin'));
+      
+      allow delete: if isSignedIn() && 
+                       (isSessionCoach() || isRole(request.auth.uid, 'admin'));
     }
   }
 }

@@ -32,7 +32,7 @@ const signupSchemaBase = z.object({
 const signupSchema = signupSchemaBase
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
-    path: ['confirmPassword'], // Error applies to confirmPassword field
+    path: ['confirmPassword'], 
   })
   .refine(data => {
     if ((data.role === 'admin' || data.role === 'coach') && !data.email.endsWith('@hmperform.com')) {
@@ -102,15 +102,14 @@ export default function SignupPage() {
         await updateProfile(firebaseUser, { displayName: data.displayName });
         console.log('[SignupPage] Firebase Auth profile updated with displayName:', data.displayName);
         
-        // Prepare the minimal data for Firestore
-        const profileDataForFirestore: MinimalProfileDataForCreation = {
+        const profileDataToSave: MinimalProfileDataForCreation = {
           email: data.email,
           displayName: data.displayName,
-          role: data.role,
+          role: data.role as UserRole, 
         };
         
-        console.log('[SignupPage] Calling createUserProfileInFirestore with UID:', firebaseUser.uid, 'and data:', profileDataForFirestore);
-        await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
+        console.log('[SignupPage] Calling createUserProfileInFirestore for UID:', firebaseUser.uid, 'with data:', profileDataToSave);
+        await createUserProfileInFirestore(firebaseUser.uid, profileDataToSave);
         console.log('[SignupPage] User profile CREATED in Firestore for UID:', firebaseUser.uid);
 
 
