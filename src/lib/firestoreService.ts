@@ -2,7 +2,7 @@
 'use server';
 
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase'; 
+import { db, isFirebaseConfigured, auth } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
@@ -25,17 +25,15 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   photoURL?: string | null;
-  createdAt: Timestamp; 
+  createdAt: Timestamp;
   coachId?: string;
   stripeCustomerId?: string;
 }
 
-// Type for the minimal data used for creating a new user profile document
-// It only contains fields that are set at the point of creation from the signup form.
 export type MinimalProfileDataForCreation = {
   email: string;
   displayName: string;
-  role: Exclude<UserRole, null>; // Role is guaranteed to be 'admin', 'coach', or 'client'
+  role: Exclude<UserRole, null>;
 };
 
 
@@ -63,14 +61,14 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     if (userSnap.exists()) {
       const data = userSnap.data();
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
-      
+
       const profile: UserProfile = {
         uid,
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL || null,
-        createdAt: data.createdAt, 
+        createdAt: data.createdAt,
         coachId: data.coachId || undefined,
         stripeCustomerId: data.stripeCustomerId || undefined,
       };
@@ -97,12 +95,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 
 export async function createUserProfileInFirestore(
-  uid: string, 
-  profileDataFromSignup: MinimalProfileDataForCreation 
+  uid: string,
+  profileDataFromSignup: MinimalProfileDataForCreation
 ): Promise<void> {
   ensureFirebaseIsOperational();
   console.log(`[firestoreService] createUserProfileInFirestore called with UID argument: ${uid}`);
-  console.log(`[firestoreService] Received profileDataFromSignup (contains auto-assigned role):`, JSON.stringify(profileDataFromSignup));
+  console.log(`[firestoreService] Received profileDataFromSignup (contains app-assigned role):`, JSON.stringify(profileDataFromSignup));
 
   const userDocRef = doc(db, 'users', uid);
   console.log(`[firestoreService] Document reference for new user: ${userDocRef.path}`);
@@ -110,29 +108,37 @@ export async function createUserProfileInFirestore(
   const dataForFirestore: {
     uid: string;
     email: string;
-    displayName: string;
+    displayName:string;
     role: Exclude<UserRole, null>;
     createdAt: FieldValue;
-    // Explicitly NO photoURL, coachId, stripeCustomerId here for initial minimal creation
+    // Optional fields like photoURL, coachId, stripeCustomerId are NOT included in initial creation
+    // to keep it minimal and satisfy strict 'hasAll' rules if they exist.
   } = {
-    uid: uid, 
-    email: profileDataFromSignup.email.toLowerCase(), // Store email in lowercase for consistency
+    uid: uid, // This uid comes from Firebase Auth and is used as the document ID and a field
+    email: profileDataFromSignup.email.toLowerCase(),
     displayName: profileDataFromSignup.displayName,
     role: profileDataFromSignup.role,
     createdAt: serverTimestamp(),
   };
-  
+
   if (auth.currentUser) {
       console.log(`[firestoreService] Current auth.currentUser.uid just before setDoc: ${auth.currentUser.uid}. UID for doc path: ${uid}. UID in data: ${dataForFirestore.uid}`);
   } else {
-      console.warn('[firestoreService] auth.currentUser is null just before setDoc. This is unexpected if called after successful signup.');
+      // This case should ideally not happen if createUserProfileInFirestore is called right after successful auth user creation
+      console.warn('[firestoreService] auth.currentUser is null just before setDoc. This is unexpected. Proceeding with UID argument.');
+      if (uid !== dataForFirestore.uid) {
+        // This would be a critical internal logic error
+        console.error(`[firestoreService] CRITICAL: UID argument ('${uid}') mismatches dataForFirestore.uid ('${dataForFirestore.uid}') while auth.currentUser is null.`);
+        throw new Error("Internal error: UID mismatch during profile creation when auth.currentUser is null.");
+      }
   }
-  console.log(`[firestoreService] FINAL dataForFirestore being written (minimal):`, JSON.stringify(dataForFirestore, (key, value) => 
+
+  console.log(`[firestoreService] FINAL dataForFirestore being written (minimal):`, JSON.stringify(dataForFirestore, (key, value) =>
     value instanceof Object && value.constructor && value.constructor.name === 'FieldValue' ? '(ServerTimestamp)' : value));
-    
+
   try {
     await setDoc(userDocRef, dataForFirestore);
-    console.log(`[firestoreService] User profile (minimal) should be CREATED in Firestore for UID: ${uid}`);
+    console.log(`[firestoreService] User profile (minimal) successfully CREATED in Firestore for UID: ${uid}`);
   } catch (error: any) {
     console.error(`[firestoreService] Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
     let detailedMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;

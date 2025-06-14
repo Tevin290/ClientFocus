@@ -32,23 +32,28 @@ const signupSchemaBase = z.object({
   role: z.enum(['admin', 'coach', 'client'], { required_error: 'Please select a role' }),
 });
 
+// This schema validates the form input, including that only @hmperform.com emails
+// can *select* 'admin' or 'coach' in the form. The actual role assignment logic below
+// will override this based on ADMIN_EMAILS and domain for final assignment.
 const signupSchema = signupSchemaBase
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
-    path: ['confirmPassword'], 
+    path: ['confirmPassword'],
   })
   .refine(data => {
     const normalizedEmail = data.email.toLowerCase();
+    if (data.role === 'admin' && !ADMIN_EMAILS.includes(normalizedEmail)) {
+        // This specific check ensures that if 'admin' is selected, the email MUST be in ADMIN_EMAILS.
+        // If not, it's an invalid selection, even if it's an @hmperform.com email.
+        return false;
+    }
     if ((data.role === 'admin' || data.role === 'coach') && !normalizedEmail.endsWith('@hmperform.com')) {
       return false;
-    }
-    if (data.role === 'admin' && !ADMIN_EMAILS.includes(normalizedEmail)) {
-        return false; 
     }
     return true;
   }, {
     message: "Admin/Coach roles require an @hmperform.com email. Admin role requires a pre-approved email.",
-    path: ["role"], 
+    path: ["role"],
   });
 
 
@@ -71,7 +76,7 @@ export default function SignupPage() {
       email: '',
       password: '',
       confirmPassword: '',
-      role: initialRole || undefined, 
+      role: initialRole || undefined,
     },
   });
 
@@ -98,7 +103,7 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
-    
+
     const normalizedEmail = data.email.toLowerCase();
     let assignedRole: Exclude<UserRole, null>;
 
@@ -109,38 +114,34 @@ export default function SignupPage() {
     } else {
       assignedRole = 'client';
     }
-    
-    console.log(`[SignupPage] Attempting sign up with form data:`, data);
-    console.log(`[SignupPage] Auto-assigned role based on email (${normalizedEmail}): ${assignedRole}`);
 
+    // This is the data that will be passed to Firestore service, with the app-determined role.
     const profileDataForFirestore: MinimalProfileDataForCreation = {
       email: normalizedEmail,
       displayName: data.displayName,
       role: assignedRole,
     };
-    console.log(`[SignupPage] Calling createUserProfileInFirestore for UID (to be assigned by Auth) with data:`, profileDataForFirestore);
-    
+
+    console.log(`[SignupPage] Attempting sign up. User-selected role: ${data.role}, Auto-assigned role: ${assignedRole}`);
+    console.log(`[SignupPage] Profile data for Firestore (before UID):`, profileDataForFirestore);
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
-      
+
       if (firebaseUser) {
-        console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}, Email: ${firebaseUser.email}`);
+        console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}`);
         await updateProfile(firebaseUser, { displayName: data.displayName });
         console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
-        
-        if (auth.currentUser) {
-            console.log(`[SignupPage] auth.currentUser before creating Firestore profile: UID: ${auth.currentUser.uid}, Email: ${auth.currentUser.email}, Display Name: ${auth.currentUser.displayName}`);
-        } else {
-            console.warn('[SignupPage] auth.currentUser is null unexpectedly after profile update but before Firestore profile creation.');
-        }
-        
+
+        // Call Firestore service to create the user profile document
+        console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid} with data:`, JSON.stringify(profileDataForFirestore));
         await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
-        
+
         toast({
           title: 'Account Created!',
           description: 'Your account has been successfully created. Please log in.',
-          variant: 'default', 
+          variant: 'default',
         });
         router.push('/login');
       } else {
@@ -154,9 +155,10 @@ export default function SignupPage() {
       } else if (error.code === 'auth/weak-password') {
         toastDescription = 'The password is too weak.';
       } else if (error.message && (error.message.includes("Failed to create/update user profile in Firestore") || error.message.includes("PERMISSION_DENIED"))) {
+        // More specific message for Firestore permission issues
         toastDescription = "Signup failed – check email domain or try again.";
       }
-      
+
       toast({ title: 'Sign Up Failed', description: toastDescription, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
@@ -251,7 +253,7 @@ export default function SignupPage() {
                         ))}
                       </RadioGroup>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage /> {/* This will show Zod validation errors for the role field */}
                   </FormItem>
                 )}
               />
