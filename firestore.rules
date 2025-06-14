@@ -4,45 +4,72 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /* ──────────────── USERS COLLECTION (EXTREME DIAGNOSTIC) ──────────────── */
+    // Users Collection
     match /users/{userId} {
+      // Allow create only if the user is authenticated, the userId matches their auth uid,
+      // and the document contains the diagnosticMarker and createdAt fields.
+      // This is an EXTREME DIAGNOSTIC RULE.
+      allow create: if request.auth != null &&
+                       request.auth.uid == userId &&
+                       request.resource.data.containsKey('diagnosticMarker') &&
+                       request.resource.data.diagnosticMarker == true &&
+                       request.resource.data.containsKey('createdAt') &&
+                       request.resource.data.createdAt is timestamp;
 
-      // ── CREATE (EXTREME DIAGNOSTIC) ──
-      //  • Authenticated user only
-      //  • Doc ID must equal auth.uid
-      //  • Document must contain 'diagnosticMarker' (boolean) and 'createdAt' (timestamp)
-      allow create: if request.auth != null
-                    && userId == request.auth.uid
-                    && request.resource.data.keys().hasAll(['diagnosticMarker', 'createdAt'])
-                    && request.resource.data.diagnosticMarker == true
-                    && request.resource.data.createdAt is timestamp;
+      // Allow read if the user is authenticated and is requesting their own document.
+      allow read: if request.auth != null && request.auth.uid == userId;
 
-      // ── READ ──
-      //  • User may read their own document if it exists and they are authenticated.
-      //  • This rule won't prevent "PERMISSION_DENIED" if the document doesn't exist,
-      //    which is expected if the create operation fails.
-      allow read: if request.auth != null
-                  && request.auth.uid == userId;
+      // Allow update if the user is authenticated and is updating their own document.
+      // For now, this is a general update rule. Specific field validations can be added.
+      allow update: if request.auth != null && request.auth.uid == userId;
 
-      // ── UPDATE (Restrictive for safety during diagnostics) ──
-      allow update: if false; // Disallow updates during this diagnostic phase
-
-      // ── DELETE ──
+      // Generally, disallow delete for user profiles unless explicitly needed.
       allow delete: if false;
     }
 
-    /* ──────────────── SESSIONS COLLECTION ──────────────── */
+    // Sessions Collection
     match /sessions/{sessionId} {
-      allow read, write: if request.auth != null;
-    }
+      // Allow create if user is authenticated and is a coach, and required fields are present.
+      allow create: if request.auth != null &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
+                       request.resource.data.coachId == request.auth.uid &&
+                       request.resource.data.containsKey('clientName') &&
+                       request.resource.data.containsKey('clientEmail') &&
+                       request.resource.data.containsKey('sessionDate') &&
+                       request.resource.data.sessionDate is timestamp &&
+                       request.resource.data.containsKey('sessionType') &&
+                       request.resource.data.containsKey('sessionNotes') &&
+                       request.resource.data.containsKey('status') &&
+                       (request.resource.data.status == 'Logged' || request.resource.data.status == 'Reviewed' || request.resource.data.status == 'Billed');
 
-    /* ──────────────── APP SETTINGS DOCS ──────────────── */
-    match /appSettings/{settingsId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-                   && get(/databases/$(database)/documents/users/$(request.auth.uid))
-                        .data.role == 'admin'; // This will fail if admin profile not created
+
+      // Allow read:
+      // 1. Admin can read any session.
+      // 2. Coach can read sessions they created.
+      // 3. Client can read their own sessions.
+      allow read: if request.auth != null &&
+                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' && resource.data.coachId == request.auth.uid) ||
+                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' && resource.data.clientId == request.auth.uid));
+
+      // Allow update:
+      // 1. Admin can update any session (e.g., status).
+      // 2. Coach can update sessions they created (e.g., notes, videoLink, status before billing).
+      // Ensure coaches cannot change status to 'Billed' directly unless logic allows.
+      // For now, allow coach to update if it's their session, admin can update anything.
+      allow update: if request.auth != null &&
+                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+                       (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
+                        resource.data.coachId == request.auth.uid &&
+                        // Optional: Prevent coach from changing status once Billed if that's a business rule
+                        (resource.data.status != 'Billed' || request.resource.data.status == resource.data.status )
+                       )
+                      );
+
+      // Generally, disallow delete for sessions unless explicitly needed by an admin.
+      allow delete: if request.auth != null &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }
-
+    

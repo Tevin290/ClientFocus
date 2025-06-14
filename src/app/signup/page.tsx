@@ -30,10 +30,12 @@ import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, B
 
 import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
-import { createUserProfileInFirestore, type MinimalProfileDataForCreation } from '@/lib/firestoreService';
+import { createUserProfileInFirestore } from '@/lib/firestoreService'; // Updated signature
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
+// This ADMIN_EMAILS constant will NOT be used by the diagnostic createUserProfileInFirestore,
+// but is kept for when normal functionality is restored.
 const ADMIN_EMAILS = (
   process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['hello@hmperform.com']
 );
@@ -131,8 +133,9 @@ export default function SignupPage() {
       
       await updateProfile(firebaseUser, { displayName: data.displayName });
       
-      // For DIAGNOSTIC: createUserProfileInFirestore now only takes firebaseUser
-      await createUserProfileInFirestore(firebaseUser);
+      // Pass the entire firebaseUser object for profile creation
+      // This uses the EXTREME DIAGNOSTIC version of createUserProfileInFirestore
+      await createUserProfileInFirestore(firebaseUser); 
 
       toast({
         title: 'Account Created!',
@@ -329,3 +332,4 @@ export default function SignupPage() {
     </div>
   );
 }
+    

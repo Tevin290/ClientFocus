@@ -21,7 +21,7 @@ function ensureFirebaseIsOperational() {
 }
 
 export interface UserProfile {
-  uid: string; // This will be the document ID
+  // uid is the document ID, not a field in the document
   email: string;
   displayName: string;
   role: UserRole;
@@ -29,16 +29,8 @@ export interface UserProfile {
   createdAt: Timestamp;
   coachId?: string;
   stripeCustomerId?: string;
+  diagnosticMarker?: boolean; // For extreme diagnostics
 }
-
-// Data needed from signup form to create the Firestore profile
-// This type is less relevant for the current diagnostic createUserProfileInFirestore
-export type MinimalProfileDataForCreation = {
-  email: string;
-  displayName: string;
-  role: Exclude<UserRole, null>;
-};
-
 
 export interface NewSessionData {
   coachId: string;
@@ -76,7 +68,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       }
 
       const profile: UserProfile = {
-        uid: userSnap.id,
+        // uid: userSnap.id, // uid is the doc ID, not stored as a field
         email: data.email,
         displayName: data.displayName,
         role,
@@ -84,6 +76,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
         createdAt: createdAtTimestamp,
         coachId: data.coachId || undefined,
         stripeCustomerId: data.stripeCustomerId || undefined,
+        diagnosticMarker: data.diagnosticMarker || undefined,
       };
       console.log(`[firestoreService] User profile successfully fetched for UID ${uid}. Role: ${profile.role}`);
       return profile;
@@ -105,7 +98,6 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     throw new Error(detailedMessage);
   }
 }
-
 
 // EXTREME DIAGNOSTIC VERSION: Only takes firebaseUser, writes MINIMAL HARDCODED data.
 export async function createUserProfileInFirestore(
@@ -147,10 +139,13 @@ export async function createUserProfileInFirestore(
         if (error.message) detailedMessage += ` Original error: ${error.message}.`;
         else detailedMessage += ` An unknown error occurred.`;
     }
+    // Do not re-throw if it's the specific "Firebase is not configured" or "DB not initialized" errors,
+    // as ensureFirebaseIsOperational already threw them.
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw error;
+      // Already handled by ensureFirebaseIsOperational, re-throwing can mask the original more specific error.
+    } else {
+       throw error; // Re-throw the original error from setDoc or the constructed detailed message if it's not a config error.
     }
-    throw error; // Re-throw the original error to be handled by the caller
   }
 }
 
@@ -341,3 +336,4 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
   }
 }
 
+    
