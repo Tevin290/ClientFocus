@@ -10,13 +10,12 @@ import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { UserPlus, AlertTriangle, LifeBuoy, Loader2 } from 'lucide-react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
-import { createUserProfileInFirestore, type MinimalProfileDataForSignup } from '@/lib/firestoreService';
+import { createUserProfileInFirestore, type MinimalProfileDataForCreation } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
@@ -91,34 +90,26 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
-    // console.log('[SignupPage] Attempting sign up with form data:', {displayName: data.displayName, email: data.email, role: data.role});
+    
+    // Data is validated by Zod, including role/domain consistency.
+    // data.role will be 'admin', 'coach', or 'client'.
+    const profileDataForFirestore: MinimalProfileDataForCreation = {
+      email: data.email,
+      displayName: data.displayName,
+      role: data.role as Exclude<UserRole, null>, // Zod ensures it's one of the valid, non-null roles
+    };
+    console.log('[SignupPage] Calling createUserProfileInFirestore for new user with data:', JSON.stringify(profileDataForFirestore));
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
-      // console.log('[SignupPage] Firebase Auth user created:', firebaseUser?.uid, firebaseUser?.email);
-
-
+      
       if (firebaseUser) {
         await updateProfile(firebaseUser, { displayName: data.displayName });
-        // console.log('[SignupPage] Firebase Auth profile updated with displayName:', data.displayName);
         
-        // Prepare minimal data specifically for Firestore profile creation
-        const profileDataForFirestore: MinimalProfileDataForSignup = {
-          email: data.email,
-          displayName: data.displayName,
-          role: data.role as UserRole, 
-        };
-        
-        console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid} with data:`, JSON.stringify(profileDataForFirestore, null, 2));
-        // if (auth.currentUser) {
-        //     console.log(`[SignupPage] auth.currentUser before creating Firestore profile: ${auth.currentUser.uid} ${auth.currentUser.email} Display Name: ${auth.currentUser.displayName}`);
-        // } else {
-        //     console.warn('[SignupPage] auth.currentUser is null unexpectedly right before calling createUserProfileInFirestore');
-        // }
+        console.log(`[SignupPage] Auth user created (UID: ${firebaseUser.uid}). Attempting to create Firestore profile.`);
         await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
-        // console.log('[SignupPage] User profile CREATED in Firestore for UID:', firebaseUser.uid);
-
-
+        
         toast({
           title: 'Account Created!',
           description: 'Your account has been successfully created. Please log in.',
@@ -126,8 +117,7 @@ export default function SignupPage() {
         });
         router.push('/login');
       } else {
-        // console.error("[SignupPage] Firebase user object was null after createUserWithEmailAndPassword.");
-        throw new Error("User creation failed in Firebase Auth.");
+        throw new Error("User creation failed in Firebase Auth (firebaseUser was null).");
       }
     } catch (error: any) {
       console.error('[SignupPage] Sign Up Error:', error.message, error.code ? `Code: ${error.code}`: '', error);
@@ -137,7 +127,7 @@ export default function SignupPage() {
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'The password is too weak.';
       } else if (error.message && (error.message.includes("PERMISSION_DENIED") || error.message.includes("Missing or insufficient permissions"))){
-        errorMessage = `Sign up failed. Could not save profile to database due to permissions (Error: ${error.message}). Please contact an administrator or check Firestore rules.`;
+        errorMessage = `Could not save profile to database due to permissions (Error: ${error.message}). Please check Firestore rules.`;
       } else if (error.message && error.message.includes("Unsupported field value: undefined")) {
          errorMessage = `Sign up failed due to invalid data (Error: ${error.message}). An optional field might have been passed as undefined.`;
       }
@@ -259,4 +249,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
