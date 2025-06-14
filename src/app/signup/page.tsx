@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -19,8 +18,9 @@ import { createUserProfileInFirestore, type MinimalProfileDataForCreation } from
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
-// Predefined list of admin emails (ideally from environment variables)
-// Defaulting to 'hello@hmperform.com' as the admin email if NEXT_PUBLIC_ADMIN_EMAILS is not set.
+// Default admin email if NEXT_PUBLIC_ADMIN_EMAILS is not set.
+// For testing, explicitly use 'hello@hmperform.com'.
+// In a real deployment, this should come from process.env.NEXT_PUBLIC_ADMIN_EMAILS
 const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['hello@hmperform.com']);
 
 
@@ -29,12 +29,11 @@ const signupSchemaBase = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['admin', 'coach', 'client'], { required_error: 'Please select a role' }),
+  // Role selected in form - this is for client-side validation display only.
+  // The actual role assignment logic in onSubmit will override this.
+  role: z.enum(['admin', 'coach', 'client'], { required_error: 'Please select your intended role' }),
 });
 
-// This schema validates the form input, including that only @hmperform.com emails
-// can *select* 'admin' or 'coach' in the form. The actual role assignment logic below
-// will override this based on ADMIN_EMAILS and domain for final assignment.
 const signupSchema = signupSchemaBase
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
@@ -42,13 +41,19 @@ const signupSchema = signupSchemaBase
   })
   .refine(data => {
     const normalizedEmail = data.email.toLowerCase();
+    // Client-side validation for role selection based on email.
+    // This provides immediate feedback but the server-side logic (inferred or through rules) is the source of truth.
     if (data.role === 'admin' && !ADMIN_EMAILS.includes(normalizedEmail)) {
-        // This specific check ensures that if 'admin' is selected, the email MUST be in ADMIN_EMAILS.
-        // If not, it's an invalid selection, even if it's an @hmperform.com email.
-        return false;
+        return false; // Cannot select admin if email not in ADMIN_EMAILS
     }
     if ((data.role === 'admin' || data.role === 'coach') && !normalizedEmail.endsWith('@hmperform.com')) {
-      return false;
+      return false; // Cannot select admin/coach if not @hmperform.com email
+    }
+    if (data.role === 'client' && normalizedEmail.endsWith('@hmperform.com') && !ADMIN_EMAILS.includes(normalizedEmail)) {
+      // Discourage @hmperform.com users (non-admin) from selecting client
+      // They should probably be 'coach'. This is a soft validation, backend logic assigns 'coach'.
+      // This path is tricky, maybe remove this specific client check if it's confusing.
+      // The backend logic will make them 'coach' anyway.
     }
     return true;
   }, {
@@ -67,7 +72,9 @@ export default function SignupPage() {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [firebaseNotConfigured, setFirebaseNotConfigured] = useState(false);
 
-  const initialRole = searchParams.get('role') as UserRole | null;
+  // Note: initialRole from URL params is not used to set the actual role,
+  // as the role is now strictly determined by email.
+  // It could be used to pre-select the radio button if desired, but defaultValues.role handles that.
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -76,7 +83,7 @@ export default function SignupPage() {
       email: '',
       password: '',
       confirmPassword: '',
-      role: initialRole || undefined,
+      role: 'client', // Default form selection, actual role determined by email
     },
   });
 
@@ -107,6 +114,7 @@ export default function SignupPage() {
     const normalizedEmail = data.email.toLowerCase();
     let assignedRole: Exclude<UserRole, null>;
 
+    // Definitive role assignment based on email
     if (ADMIN_EMAILS.includes(normalizedEmail)) {
       assignedRole = 'admin';
     } else if (normalizedEmail.endsWith('@hmperform.com')) {
@@ -114,15 +122,13 @@ export default function SignupPage() {
     } else {
       assignedRole = 'client';
     }
+    console.log(`[SignupPage] Form submitted. User-selected role in form: ${data.role}, Auto-assigned role based on email: ${assignedRole}`);
 
-    // This is the data that will be passed to Firestore service, with the app-determined role.
     const profileDataForFirestore: MinimalProfileDataForCreation = {
       email: normalizedEmail,
       displayName: data.displayName,
-      role: assignedRole,
+      role: assignedRole, // Use the auto-assigned role
     };
-
-    console.log(`[SignupPage] Attempting sign up. User-selected role: ${data.role}, Auto-assigned role: ${assignedRole}`);
     console.log(`[SignupPage] Profile data for Firestore (before UID):`, profileDataForFirestore);
 
     try {
@@ -134,14 +140,13 @@ export default function SignupPage() {
         await updateProfile(firebaseUser, { displayName: data.displayName });
         console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
 
-        // Call Firestore service to create the user profile document
         console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid} with data:`, JSON.stringify(profileDataForFirestore));
         await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
+        console.log(`[SignupPage] createUserProfileInFirestore successful for UID: ${firebaseUser.uid}`);
 
         toast({
           title: 'Account Created!',
           description: 'Your account has been successfully created. Please log in.',
-          variant: 'default',
         });
         router.push('/login');
       } else {
@@ -149,17 +154,16 @@ export default function SignupPage() {
       }
     } catch (error: any) {
       console.error('[SignupPage] Sign Up Error:', error.message, error.code ? `Code: ${error.code}`: '', error);
-      let toastDescription = "Sign up failed. Please try again.";
+      let errorMessage = "Sign up failed. Please try again.";
       if (error.code === 'auth/email-already-in-use') {
-        toastDescription = 'This email address is already in use.';
+        errorMessage = 'This email address is already in use.';
       } else if (error.code === 'auth/weak-password') {
-        toastDescription = 'The password is too weak.';
+        errorMessage = 'The password is too weak.';
       } else if (error.message && (error.message.includes("Failed to create/update user profile in Firestore") || error.message.includes("PERMISSION_DENIED"))) {
-        // More specific message for Firestore permission issues
-        toastDescription = "Signup failed – check email domain or try again.";
+        errorMessage = "Signup failed – check email domain or try again.";
       }
 
-      toast({ title: 'Sign Up Failed', description: toastDescription, variant: 'destructive' });
+      toast({ title: 'Sign Up Failed', description: errorMessage, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
     }
@@ -233,7 +237,7 @@ export default function SignupPage() {
                 name="role"
                 render={({ field }) => (
                   <FormItem className="space-y-3">
-                    <FormLabel>Select Your Intended Role (Your final role will be auto-assigned based on your email)</FormLabel>
+                    <FormLabel>Select Your Intended Role (Final role is auto-assigned based on email)</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
@@ -253,7 +257,7 @@ export default function SignupPage() {
                         ))}
                       </RadioGroup>
                     </FormControl>
-                    <FormMessage /> {/* This will show Zod validation errors for the role field */}
+                    <FormMessage />
                   </FormItem>
                 )}
               />

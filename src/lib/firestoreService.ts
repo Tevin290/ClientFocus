@@ -1,8 +1,7 @@
-
 'use server';
 
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase';
+import { db, isFirebaseConfigured, auth } from './firebase'; // Ensured auth is imported
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 
@@ -25,7 +24,7 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   photoURL?: string | null;
-  createdAt: Timestamp;
+  createdAt: Timestamp; // Ensure this is part of the type
   coachId?: string;
   stripeCustomerId?: string;
 }
@@ -62,17 +61,30 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       const data = userSnap.data();
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
 
+      // Ensure createdAt is handled correctly, assuming it's stored as a Firestore Timestamp
+      let createdAtTimestamp: Timestamp;
+      if (data.createdAt instanceof Timestamp) {
+        createdAtTimestamp = data.createdAt;
+      } else if (data.createdAt && typeof data.createdAt.seconds === 'number' && typeof data.createdAt.nanoseconds === 'number') {
+        // Handle cases where it might be a plain object from server/client transfer if not directly a Timestamp instance
+        createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+      } else {
+        // Fallback or error if createdAt is missing or in an unexpected format
+        console.warn(`[firestoreService] createdAt field for UID ${uid} is missing or not a Firestore Timestamp. Using current time as fallback.`);
+        createdAtTimestamp = Timestamp.now();
+      }
+
       const profile: UserProfile = {
         uid,
         email: data.email,
         displayName: data.displayName,
         role,
         photoURL: data.photoURL || null,
-        createdAt: data.createdAt,
+        createdAt: createdAtTimestamp,
         coachId: data.coachId || undefined,
         stripeCustomerId: data.stripeCustomerId || undefined,
       };
-      console.log(`[firestoreService] User profile successfully fetched for UID ${uid}:`, JSON.stringify(profile));
+      console.log(`[firestoreService] User profile successfully fetched for UID ${uid}.`);
       return profile;
     }
     console.log(`[firestoreService] No user profile found for UID: ${uid}`);
@@ -95,44 +107,39 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 
 export async function createUserProfileInFirestore(
-  uid: string,
+  uid: string, // This UID must come from Firebase Auth (userCredential.user.uid)
   profileDataFromSignup: MinimalProfileDataForCreation
 ): Promise<void> {
   ensureFirebaseIsOperational();
   console.log(`[firestoreService] createUserProfileInFirestore called with UID argument: ${uid}`);
   console.log(`[firestoreService] Received profileDataFromSignup (contains app-assigned role):`, JSON.stringify(profileDataFromSignup));
 
-  const userDocRef = doc(db, 'users', uid);
+  const userDocRef = doc(db, 'users', uid); // Use the auth UID as the document ID
   console.log(`[firestoreService] Document reference for new user: ${userDocRef.path}`);
 
+  if (!auth.currentUser || auth.currentUser.uid !== uid) {
+    const authStateError = `[firestoreService] Critical Auth Mismatch: auth.currentUser.uid ('${auth.currentUser?.uid}') does not match provided uid ('${uid}') for profile creation. Aborting.`;
+    console.error(authStateError);
+    throw new Error("Authentication state error. Cannot create profile.");
+  }
+
+  // Construct the minimal profile object for Firestore
+  // This object structure MUST align with your Firestore security rules for 'create'
   const dataForFirestore: {
     uid: string;
     email: string;
-    displayName:string;
+    displayName: string;
     role: Exclude<UserRole, null>;
-    createdAt: FieldValue;
-    // Optional fields like photoURL, coachId, stripeCustomerId are NOT included in initial creation
-    // to keep it minimal and satisfy strict 'hasAll' rules if they exist.
+    createdAt: FieldValue; // Use FieldValue for serverTimestamp
   } = {
-    uid: uid, // This uid comes from Firebase Auth and is used as the document ID and a field
+    uid: uid, // Store the UID as a field in the document
     email: profileDataFromSignup.email.toLowerCase(),
     displayName: profileDataFromSignup.displayName,
     role: profileDataFromSignup.role,
-    createdAt: serverTimestamp(),
+    createdAt: serverTimestamp(), // Use Firestore server timestamp
   };
-
-  if (auth.currentUser) {
-      console.log(`[firestoreService] Current auth.currentUser.uid just before setDoc: ${auth.currentUser.uid}. UID for doc path: ${uid}. UID in data: ${dataForFirestore.uid}`);
-  } else {
-      // This case should ideally not happen if createUserProfileInFirestore is called right after successful auth user creation
-      console.warn('[firestoreService] auth.currentUser is null just before setDoc. This is unexpected. Proceeding with UID argument.');
-      if (uid !== dataForFirestore.uid) {
-        // This would be a critical internal logic error
-        console.error(`[firestoreService] CRITICAL: UID argument ('${uid}') mismatches dataForFirestore.uid ('${dataForFirestore.uid}') while auth.currentUser is null.`);
-        throw new Error("Internal error: UID mismatch during profile creation when auth.currentUser is null.");
-      }
-  }
-
+  
+  console.log(`[firestoreService] Current auth.currentUser.uid just before setDoc: ${auth.currentUser.uid}. UID for doc path: ${uid}. UID in data: ${dataForFirestore.uid}`);
   console.log(`[firestoreService] FINAL dataForFirestore being written (minimal):`, JSON.stringify(dataForFirestore, (key, value) =>
     value instanceof Object && value.constructor && value.constructor.name === 'FieldValue' ? '(ServerTimestamp)' : value));
 
@@ -156,6 +163,8 @@ export async function createUserProfileInFirestore(
     throw new Error(detailedMessage);
   }
 }
+
+// ... (rest of the file remains the same: getClientSessions, getCoachSessions, etc.)
 
 export async function getClientSessions(clientId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();

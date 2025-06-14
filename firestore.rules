@@ -1,68 +1,65 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rules for user profiles
+    /* ──────────────── USERS COLLECTION ──────────────── */
     match /users/{userId} {
-      // Allow a user to CREATE their own profile document if:
-      // 1. They are authenticated (request.auth is not null).
-      // 2. The document ID ({userId}) they are trying to create matches their own authenticated UID.
-      // 3. The 'uid' field *inside* the document data also matches their own authenticated UID.
-      // 4. The 'email' field *inside* the document data matches their authenticated email.
-      // 5. The role assignment is valid:
-      //    - 'client' role is always allowed.
-      //    - 'coach' or 'admin' roles are only allowed if the user's email is from @hmperform.com.
-      // 6. The document contains all required fields: 'uid', 'email', 'displayName', 'role', 'createdAt'.
-      allow create: if request.auth != null &&
-                       request.auth.uid == userId &&
-                       request.resource.data.uid == request.auth.uid &&
-                       request.resource.data.email == request.auth.token.email &&
-                       (
-                         request.resource.data.role == 'client' ||
-                         (
-                           (request.resource.data.role == 'coach' || request.resource.data.role == 'admin') &&
-                           request.auth.token.email.matches('.*@hmperform\\.com$')
+
+      // ── CREATE ──
+      //  • Authenticated user only
+      //  • Doc ID must equal auth.uid
+      //  • Field uid must equal auth.uid
+      //  • Field email must match auth.token.email
+      //  • Role rules:
+      //      - 'client' → always allowed
+      //      - 'coach' | 'admin' → only if email ends with @hmperform.com AND email is verified
+      //  • Required keys: uid, email, displayName, role, createdAt
+      allow create: if request.auth != null
+                    && userId == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.email == request.auth.token.email // Ensure email matches
+                    && (
+                         request.resource.data.role == 'client'
+                         || (
+                              (request.resource.data.role in ['coach', 'admin'])
+                              && request.auth.token.email.matches('.*@hmperform\\.com$')
+                              && request.auth.token.email_verified == true // Added explicit check
                          )
-                       ) &&
-                       request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt']);
+                       )
+                    // Ensuring all keys are present, INCLUDING createdAt as per your successful Playground test.
+                    && request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt']);
 
-      // Allow a user to READ their own profile document if:
-      // 1. They are authenticated.
-      // 2. The document ID ({userId}) matches their authenticated UID.
-      allow read: if request.auth != null &&
-                     request.auth.uid == userId;
+      // ── READ ──
+      //  • User may read their own document
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
 
-      // Allow a user to UPDATE their own profile document if:
-      // 1. They are authenticated.
-      // 2. The document ID ({userId}) matches their authenticated UID.
-      // 3. They are not trying to change their 'uid' or 'role' fields (these should be managed differently).
-      // 4. They are not trying to change their 'email' or 'createdAt' fields.
-      allow update: if request.auth != null &&
-                       request.auth.uid == userId &&
-                       request.resource.data.uid == resource.data.uid &&
-                       request.resource.data.role == resource.data.role &&
-                       request.resource.data.email == resource.data.email &&
-                       request.resource.data.createdAt == resource.data.createdAt;
-                       // Add other fields here that should be immutable or have specific update conditions
+      // ── UPDATE ──
+      //  • User may update their own document
+      //  • Cannot change uid, role, email, or createdAt
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.uid       == resource.data.uid
+                    && request.resource.data.role      == resource.data.role
+                    && request.resource.data.email     == resource.data.email
+                    && request.resource.data.createdAt == resource.data.createdAt;
 
-      // Disallow client-side deletion of user profiles.
+      // ── DELETE ──
+      //  • Client-side deletion not allowed
       allow delete: if false;
     }
 
-    // Rules for sessions
+    /* ──────────────── SESSIONS COLLECTION ──────────────── */
     match /sessions/{sessionId} {
-      // Example: Allow authenticated users to read and write sessions.
-      // Adjust with more specific rules based on coachId, clientId, roles etc.
-      allow read, write: if request.auth.uid != null;
+      allow read, write: if request.auth != null;
     }
 
-    // Rules for appSettings
+    /* ──────────────── APP SETTINGS DOCS ──────────────── */
     match /appSettings/{settingsId} {
-      // Example: Allow admins to read/write, authenticated users to read.
       allow read: if request.auth != null;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if request.auth != null
+                   && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }
