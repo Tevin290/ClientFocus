@@ -11,19 +11,16 @@ import { useRouter, usePathname } from 'next/navigation';
 
 export type UserRole = 'admin' | 'coach' | 'client' | null;
 
-// This will now primarily hold the Firebase User object
 interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null;
-  // Add other FirebaseUser properties if needed
 }
 
 interface RoleContextType {
-  user: AuthUser | null; // Firebase authenticated user
-  userProfile: UserProfile | null; // Your custom user profile from Firestore
+  user: AuthUser | null;
+  userProfile: UserProfile | null;
   role: UserRole;
-  // setRole: (role: UserRole) => void; // This will be mostly managed by auth state
   isLoading: boolean;
   logout: () => Promise<void>;
 }
@@ -42,7 +39,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       setIsLoading(true);
       if (firebaseUser) {
-        console.log('[RoleContext] onAuthStateChanged: User is authenticated. UID:', firebaseUser.uid, 'Email:', firebaseUser.email, 'Display Name:', firebaseUser.displayName);
+        console.log('[RoleContext] onAuthStateChanged: User is authenticated. UID:', firebaseUser.uid);
         setUser({
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -50,46 +47,56 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         });
         
         try {
-          console.log(`[RoleContext] Attempting to fetch profile for UID: ${firebaseUser.uid}...`);
           const profile = await getUserProfile(firebaseUser.uid);
           if (profile) {
             setUserProfile(profile);
             setRoleState(profile.role);
-            console.log(`[RoleContext] User profile fetched for ${firebaseUser.uid}, role set from Firestore: ${profile.role}`);
+            console.log(`[RoleContext] User profile fetched for ${firebaseUser.uid}, role: ${profile.role}`);
+            // If user has a profile and is trying to access login/signup, redirect them.
             if ((pathname === '/login' || pathname === '/signup') && profile.role) { 
+              console.log(`[RoleContext] User has profile, redirecting from ${pathname} to /${profile.role}/dashboard`);
               router.push(`/${profile.role}/dashboard`);
             }
           } else {
-            console.warn(`[RoleContext] User ${firebaseUser.uid} authenticated but no Firestore profile found or profile was null (getUserProfile returned null).`);
-            // This case is critical if createUserProfileInFirestore failed.
+            // No profile found in Firestore for an authenticated user.
+            console.warn(`[RoleContext] User ${firebaseUser.uid} authenticated but no Firestore profile found.`);
             setUserProfile(null);
             setRoleState(null);
-             if (pathname !== '/login' && pathname !== '/signup') {
-                console.log('[RoleContext] No profile found, redirecting to login.');
+            // If on a protected page, redirect to login. Allow to stay on login/signup.
+            if (pathname !== '/login' && pathname !== '/signup' && !pathname.startsWith('/coach/log-session/success')) {
+                console.log(`[RoleContext] No profile, on protected page ${pathname}, redirecting to login.`);
                 router.push('/login'); 
+             } else {
+                console.log(`[RoleContext] No profile, but on ${pathname}. Allowing user to proceed (e.g., to complete signup).`);
              }
           }
-        } catch (error) {
-            console.error("[RoleContext] Error fetching user profile during auth state change:", error);
+        } catch (error: any) {
+            console.warn(`[RoleContext] Error fetching user profile for UID ${firebaseUser.uid}: ${error.message}. This can happen if signup didn't complete.`);
             setUserProfile(null);
             setRoleState(null);
-            if (pathname !== '/login' && pathname !== '/signup') {
-                console.log('[RoleContext] Error fetching profile, redirecting to login.');
+            // If profile fetch fails and on a protected page, redirect to login.
+            // Allow to stay on login/signup to attempt action.
+            if (pathname !== '/login' && pathname !== '/signup' && !pathname.startsWith('/coach/log-session/success')) {
+                console.log(`[RoleContext] Profile fetch error, on protected page ${pathname}, redirecting to login.`);
                 router.push('/login');
+            } else {
+                 console.log(`[RoleContext] Profile fetch error, but on ${pathname}. Allowing user to proceed.`);
             }
         }
 
-      } else { // User is logged out
+      } else { 
+        // User is logged out or not authenticated.
         setUser(null);
         setUserProfile(null);
         setRoleState(null);
         console.log("[RoleContext] User logged out or not authenticated.");
+        // If not on a public page, redirect to login.
         if (
           pathname !== '/login' &&
           pathname !== '/signup' &&
-          !pathname.startsWith('/coach/log-session/success')
+          !pathname.startsWith('/coach/log-session/success') // Allow success page without full auth
         ) {
-            console.log('[RoleContext] User not authenticated, redirecting to login from path:', pathname);
+            console.log(`[RoleContext] User not authenticated, on ${pathname}, redirecting to login.`);
             router.push('/login');
         }
       }
@@ -99,13 +106,23 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
   }, [router, pathname]);
 
   const logout = async () => {
+    setIsLoading(true); // Indicate loading during logout
     try {
       await auth.signOut();
+      // onAuthStateChanged will handle setting user, userProfile, and role to null
+      // and redirecting to /login.
+      console.log("[RoleContext] User successfully signed out.");
     } catch (error) {
       console.error("[RoleContext] Error signing out: ", error);
+    } finally {
+      // Explicitly clear state here as well, though onAuthStateChanged should also do it.
+      setUser(null);
+      setUserProfile(null);
+      setRoleState(null);
+      setIsLoading(false);
+       // Router push to /login is handled by the onAuthStateChanged listener when user becomes null
     }
   };
-
 
   return (
     <RoleContext.Provider value={{ user, userProfile, role, isLoading, logout }}>
@@ -121,4 +138,3 @@ export const useRole = (): RoleContextType => {
   }
   return context;
 };
-
