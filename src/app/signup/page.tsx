@@ -20,7 +20,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
 // Predefined list of admin emails (ideally from environment variables)
-const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['jacob@hmperform.com']);
+// Defaulting to 'hello@hmperform.com' as the admin email if NEXT_PUBLIC_ADMIN_EMAILS is not set.
+const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['hello@hmperform.com']);
 
 
 const signupSchemaBase = z.object({
@@ -28,8 +29,6 @@ const signupSchemaBase = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
-  // Role selected in the form - Zod validation ensures this selected role is valid for the email type.
-  // The actual role saved to Firestore will be auto-assigned based on email logic later.
   role: z.enum(['admin', 'coach', 'client'], { required_error: 'Please select a role' }),
 });
 
@@ -38,23 +37,18 @@ const signupSchema = signupSchemaBase
     message: "Passwords don't match",
     path: ['confirmPassword'], 
   })
-  // This refine ensures the ROLE SELECTED IN THE FORM is valid for the email domain.
-  // The actual role assignment will happen in onSubmit based on email.
   .refine(data => {
-    if ((data.role === 'admin' || data.role === 'coach') && !data.email.toLowerCase().endsWith('@hmperform.com')) {
+    const normalizedEmail = data.email.toLowerCase();
+    if ((data.role === 'admin' || data.role === 'coach') && !normalizedEmail.endsWith('@hmperform.com')) {
       return false;
     }
-    // If admin role is selected, email must be in ADMIN_EMAILS list
-    if (data.role === 'admin' && !ADMIN_EMAILS.includes(data.email.toLowerCase())) {
-        // This specific message for admin role might not show directly due to how Zod pathing works with refine,
-        // but the combination of rules will prevent invalid admin selection.
-        // A more complex Zod schema could provide distinct messages.
+    if (data.role === 'admin' && !ADMIN_EMAILS.includes(normalizedEmail)) {
         return false; 
     }
     return true;
   }, {
     message: "Admin/Coach roles require an @hmperform.com email. Admin role requires a pre-approved email.",
-    path: ["role"], // Attach error to role field or email field as appropriate
+    path: ["role"], 
   });
 
 
@@ -77,7 +71,7 @@ export default function SignupPage() {
       email: '',
       password: '',
       confirmPassword: '',
-      role: initialRole || undefined, // Role selected by user in the form
+      role: initialRole || undefined, 
     },
   });
 
@@ -105,31 +99,42 @@ export default function SignupPage() {
 
     setIsSigningUp(true);
     
-    // Auto-assign the role based on email domain and ADMIN_EMAILS list
     const normalizedEmail = data.email.toLowerCase();
-    const assignedRole: Exclude<UserRole, null> = ADMIN_EMAILS.includes(normalizedEmail)
-      ? 'admin'
-      : normalizedEmail.endsWith('@hmperform.com')
-      ? 'coach'
-      : 'client';
+    let assignedRole: Exclude<UserRole, null>;
 
+    if (ADMIN_EMAILS.includes(normalizedEmail)) {
+      assignedRole = 'admin';
+    } else if (normalizedEmail.endsWith('@hmperform.com')) {
+      assignedRole = 'coach';
+    } else {
+      assignedRole = 'client';
+    }
+    
     console.log(`[SignupPage] Attempting sign up with form data:`, data);
     console.log(`[SignupPage] Auto-assigned role based on email (${normalizedEmail}): ${assignedRole}`);
 
     const profileDataForFirestore: MinimalProfileDataForCreation = {
-      email: normalizedEmail, // Use normalized email
+      email: normalizedEmail,
       displayName: data.displayName,
-      role: assignedRole, 
+      role: assignedRole,
     };
+    console.log(`[SignupPage] Calling createUserProfileInFirestore for UID (to be assigned by Auth) with data:`, profileDataForFirestore);
     
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       
       if (firebaseUser) {
+        console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}, Email: ${firebaseUser.email}`);
         await updateProfile(firebaseUser, { displayName: data.displayName });
+        console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
         
-        console.log(`[SignupPage] Auth user created (UID: ${firebaseUser.uid}). Attempting to create Firestore profile.`);
+        if (auth.currentUser) {
+            console.log(`[SignupPage] auth.currentUser before creating Firestore profile: UID: ${auth.currentUser.uid}, Email: ${auth.currentUser.email}, Display Name: ${auth.currentUser.displayName}`);
+        } else {
+            console.warn('[SignupPage] auth.currentUser is null unexpectedly after profile update but before Firestore profile creation.');
+        }
+        
         await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
         
         toast({
@@ -143,23 +148,16 @@ export default function SignupPage() {
       }
     } catch (error: any) {
       console.error('[SignupPage] Sign Up Error:', error.message, error.code ? `Code: ${error.code}`: '', error);
-      let toastTitle = 'Sign Up Failed';
-      let toastDescription = 'An unexpected error occurred. Please try again.';
-
+      let toastDescription = "Sign up failed. Please try again.";
       if (error.code === 'auth/email-already-in-use') {
         toastDescription = 'This email address is already in use.';
       } else if (error.code === 'auth/weak-password') {
         toastDescription = 'The password is too weak.';
-      } else if (error.message && error.message.includes("Failed to create/update user profile in Firestore")) {
-        // This covers permission denied and other Firestore write issues based on your request.
+      } else if (error.message && (error.message.includes("Failed to create/update user profile in Firestore") || error.message.includes("PERMISSION_DENIED"))) {
         toastDescription = "Signup failed – check email domain or try again.";
       }
-      // Log the specific error for debugging if it's a Firestore permission issue
-      if (error.message && error.message.includes("PERMISSION_DENIED")) {
-        console.error("[SignupPage] Firestore permission denied during profile creation. Check rules and data.", error);
-      }
-
-      toast({ title: toastTitle, description: toastDescription, variant: 'destructive' });
+      
+      toast({ title: 'Sign Up Failed', description: toastDescription, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
     }
@@ -233,7 +231,7 @@ export default function SignupPage() {
                 name="role"
                 render={({ field }) => (
                   <FormItem className="space-y-3">
-                    <FormLabel>Select Your Role (Your final role will be assigned based on email)</FormLabel>
+                    <FormLabel>Select Your Intended Role (Your final role will be auto-assigned based on your email)</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}

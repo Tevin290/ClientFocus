@@ -50,7 +50,9 @@ Streamline your coaching sessions and client management with SessionSync. This N
     NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id # Optional
 
     # For pre-approved admin emails during signup
-    NEXT_PUBLIC_ADMIN_EMAILS=admin1@hmperform.com,superadmin@hmperform.com
+    # Default admin email is 'hello@hmperform.com' if this is not set.
+    # To use multiple, separate them with commas: admin1@hmperform.com,superadmin@hmperform.com
+    NEXT_PUBLIC_ADMIN_EMAILS=hello@hmperform.com 
     ```
 
 2.  **Firestore Security Rules:**
@@ -98,10 +100,10 @@ After deploying the updated code and Firestore rules:
             *   `createdAt`: a server timestamp.
         *   No permission errors should occur. User is redirected to login or client dashboard.
 
-2.  **Sign up as a Coach (Company Email):**
+2.  **Sign up as a Coach (Company Email - Non-Admin):**
     *   Navigate to the `/signup` page.
-    *   Use an email address that ends with `@hmperform.com` but is **not** in your `ADMIN_EMAILS` list (e.g., `testcoach@hmperform.com`).
-    *   Select any role (system will override to 'coach' unless it's an admin email).
+    *   Use an email address that ends with `@hmperform.com` but is **not** `hello@hmperform.com` (or any email in your `NEXT_PUBLIC_ADMIN_EMAILS` list if configured), e.g., `testcoach@hmperform.com`.
+    *   Select any role (system will override to 'coach').
     *   Complete the signup process.
     *   **Expected Outcome:**
         *   User is created in Firebase Authentication.
@@ -110,7 +112,7 @@ After deploying the updated code and Firestore rules:
         *   No permission errors.
 
 3.  **Sign up as an Admin (Pre-approved Company Email):**
-    *   Ensure an email (e.g., `jacob@hmperform.com` or one from your `NEXT_PUBLIC_ADMIN_EMAILS` env var) is configured as an admin email.
+    *   Ensure an email like `hello@hmperform.com` (or one from your `NEXT_PUBLIC_ADMIN_EMAILS` env var) is used.
     *   Navigate to the `/signup` page.
     *   Use this pre-approved admin email.
     *   Select any role (system will assign 'admin').
@@ -127,7 +129,7 @@ After deploying the updated code and Firestore rules:
     *   Try to select "Coach" or "Admin" role in the radio group.
     *   **Expected Outcome:**
         *   The form validation (Zod schema) should prevent submission or show an error message indicating that Coach/Admin roles require an `@hmperform.com` email.
-        *   If somehow submitted, the Firestore rules would ultimately deny the creation if the role/domain mismatch occurred. The auto-assignment logic in `onSubmit` is designed to prevent sending an invalid role to Firestore in the first place.
+        *   If somehow submitted, the auto-assignment logic in `onSubmit` will assign 'client', and Firestore rules would deny if an invalid role/domain combination was attempted.
 
 ## Deployment
 
@@ -137,7 +139,7 @@ After deploying the updated code and Firestore rules:
     ```
 
 2.  **Deploy Frontend Application:**
-    Deploy your Next.js application to your preferred hosting provider (e.g., Vercel, Firebase Hosting, Netlify, Google Cloud App Hosting). Ensure all environment variables (especially Firebase config and `ADMIN_EMAILS`) are set up in your deployment environment.
+    Deploy your Next.js application to your preferred hosting provider (e.g., Vercel, Firebase Hosting, Netlify, Google Cloud App Hosting). Ensure all environment variables (especially Firebase config and `NEXT_PUBLIC_ADMIN_EMAILS`) are set up in your deployment environment.
     For Firebase App Hosting (if `apphosting.yaml` is configured):
     ```bash
     firebase apphosting:backends:deploy
