@@ -1,7 +1,7 @@
 
 'use server';
 
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
+import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
 import { db, isFirebaseConfigured, auth } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
@@ -21,7 +21,7 @@ function ensureFirebaseIsOperational() {
 }
 
 export interface UserProfile {
-  uid: string; // Document ID will be the UID
+  uid: string; // This will be the document ID
   email: string;
   displayName: string;
   role: UserRole;
@@ -75,7 +75,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       }
 
       const profile: UserProfile = {
-        uid: userSnap.id,
+        uid: userSnap.id, // This is the document ID, which is the user's auth UID
         email: data.email,
         displayName: data.displayName,
         role,
@@ -125,22 +125,16 @@ export async function createUserProfileInFirestore(
   const userDocRef = doc(db, 'users', uid);
   console.log(`[firestoreService] Document reference for new user: ${userDocRef.path}`);
 
-  const dataForFirestore: {
-    email: string;
-    displayName: string;
-    role: Exclude<UserRole, null>;
-    createdAt: Timestamp; // Changed from FieldValue for temporary diagnosis
-    photoURL?: string | null;
-  } = {
+  // DIAGNOSTIC STEP: Use minimal data and client-side Timestamp.now()
+  const dataForFirestore = {
     email: profileDataFromSignup.email.toLowerCase(),
-    displayName: profileDataFromSignup.displayName,
     role: profileDataFromSignup.role,
-    // DIAGNOSTIC STEP: Use client-side timestamp instead of serverTimestamp()
-    createdAt: Timestamp.now(),
-    // photoURL: firebaseUser.photoURL || null, // Optional, can be added if needed
+    // displayName: profileDataFromSignup.displayName, // Temporarily removed for diagnostics
+    createdAt: Timestamp.now(), // Using client-side timestamp for diagnostics
+    // testField: "diagnostic_test" // Added a simple field for diagnostics
   };
 
-  console.log(`[firestoreService] Attempting to write dataForFirestore (using client-side Timestamp.now() for createdAt):`, JSON.stringify(dataForFirestore, null, 2));
+  console.log(`[firestoreService] DIAGNOSTIC: Attempting to write MINIMAL dataForFirestore (using client-side Timestamp.now() for createdAt):`, JSON.stringify(dataForFirestore, null, 2));
 
   try {
     await setDoc(userDocRef, dataForFirestore);
