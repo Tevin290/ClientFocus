@@ -4,7 +4,7 @@
 // For this example, we assume you'll replace placeholders manually for now.
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { getAuth, type Auth, setPersistence, browserSessionPersistence } from 'firebase/auth'; // Added setPersistence, browserSessionPersistence
 import { getFirestore, type Firestore } from 'firebase/firestore';
 // import { getAnalytics, type Analytics } from "firebase/analytics"; // Optional
 
@@ -24,15 +24,8 @@ let db: Firestore;
 // let analytics: Analytics | undefined; // Optional
 
 if (getApps().length === 0) {
-  // Check if the configuration still contains generic placeholders (relevant if env vars are also missing)
   if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY" || firebaseConfig.apiKey === "AIzaSyBhe_SSyUTFo5Qvx3wUE6Hxo9GDMVPGcAw" && process.env.NEXT_PUBLIC_FIREBASE_API_KEY === undefined) {
-    // This warning is more nuanced now. It should only fire if the defaults are still generic placeholders.
-    // If the defaults ARE the user's actual keys, this warning logic might need adjustment or removal
-    // if we consider direct hardcoding of actual keys as "configured".
-    // For now, if apiKey matches the new default AND the env var is not set, it means we are using the hardcoded user key.
-    // The original warning compared against "YOUR_API_KEY".
-    // A more accurate warning for unconfigured state if even hardcoded values were placeholders:
-    if (firebaseConfig.apiKey === "YOUR_API_KEY_PLACEHOLDER_IF_IT_WAS_DIFFERENT") { // This logic branch is simplified
+    if (firebaseConfig.apiKey === "YOUR_API_KEY_PLACEHOLDER_IF_IT_WAS_DIFFERENT") { 
          console.warn(
             "Firebase is not configured. Please add your Firebase config to src/lib/firebase.ts or environment variables."
          );
@@ -41,33 +34,33 @@ if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+
+  // Set auth persistence to session-only
+  setPersistence(auth, browserSessionPersistence)
+    .catch((error) => {
+      console.error("Firebase Auth: Error setting persistence to session-only.", error);
+    });
+
   // if (typeof window !== 'undefined' && firebaseConfig.measurementId && firebaseConfig.measurementId !== "YOUR_MEASUREMENT_ID") {
   //   analytics = getAnalytics(app);
   // }
 } else {
   app = getApps()[0]!;
-  auth = getAuth(app);
+  auth = getAuth(app); // Ensure auth is initialized for subsequent uses if app already exists
   db = getFirestore(app);
-  // if (typeof window !== 'undefined' && firebaseConfig.measurementId && firebaseConfig.measurementId !== "YOUR_MEASUREMENT_ID") {
-  //    const existingAnalytics = getApps().find(app => getAnalytics(app)); // This line might cause issues if getAnalytics isn't initialized on all apps
-  //    if (existingAnalytics) analytics = getAnalytics(existingAnalytics);
-  //    else analytics = getAnalytics(app);
-  // }
+  // If app is re-initialized, persistence might default back if not set again.
+  // However, in typical client-side Next.js, the first block runs once.
+  // To be safe, you could call setPersistence here as well, though it might be redundant
+  // if the auth instance is truly a singleton reused.
+  // setPersistence(auth, browserSessionPersistence)
+  //   .catch((error) => {
+  //     console.error("Firebase Auth: Error re-setting persistence to session-only.", error);
+  //   });
 }
 
 export { app, auth, db };
 // export { app, auth, db, analytics }; // If using analytics
 
-// Helper function to check if Firebase is meaningfully configured
-// It checks if the primary identifiers are different from the initial generic placeholders.
 export const isFirebaseConfigured = () => {
-  const usingActualApiKey = firebaseConfig.apiKey !== "YOUR_API_KEY" && (process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== undefined || firebaseConfig.apiKey !== "AIzaSyBhe_SSyUTFo5Qvx3wUE6Hxo9GDMVPGcAw" || firebaseConfig.apiKey.startsWith("AIzaSy"));
-  const usingActualProjectId = firebaseConfig.projectId !== "YOUR_PROJECT_ID" && (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID !== undefined || firebaseConfig.projectId !== "sessionsync-wbo8u" || firebaseConfig.projectId.length > 0);
-  
-  // A simpler check now that defaults ARE actual values:
-  // If API key is present and not the GENERIC placeholder "YOUR_API_KEY"
-  // And Project ID is present and not the GENERIC placeholder "YOUR_PROJECT_ID"
-  // This means either env vars are used, or the new specific defaults are used.
   return firebaseConfig.apiKey !== "YOUR_API_KEY" && firebaseConfig.projectId !== "YOUR_PROJECT_ID";
 };
-
