@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { UserPlus, AlertTriangle, LifeBuoy, Loader2 } from 'lucide-react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
-import { createUserProfileInFirestore, type MinimalProfileDataForCreation } from '@/lib/firestoreService';
+import { createUserProfileInFirestore, type MinimalProfileDataForSignup } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
@@ -91,26 +91,32 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
-    console.log('[SignupPage] Attempting sign up with form data:', {displayName: data.displayName, email: data.email, role: data.role});
+    // console.log('[SignupPage] Attempting sign up with form data:', {displayName: data.displayName, email: data.email, role: data.role});
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
-      console.log('[SignupPage] Firebase Auth user created:', firebaseUser?.uid, firebaseUser?.email);
+      // console.log('[SignupPage] Firebase Auth user created:', firebaseUser?.uid, firebaseUser?.email);
 
 
       if (firebaseUser) {
         await updateProfile(firebaseUser, { displayName: data.displayName });
-        console.log('[SignupPage] Firebase Auth profile updated with displayName:', data.displayName);
+        // console.log('[SignupPage] Firebase Auth profile updated with displayName:', data.displayName);
         
-        const profileDataToSave: MinimalProfileDataForCreation = {
+        // Prepare minimal data specifically for Firestore profile creation
+        const profileDataForFirestore: MinimalProfileDataForSignup = {
           email: data.email,
           displayName: data.displayName,
           role: data.role as UserRole, 
         };
         
-        console.log('[SignupPage] Calling createUserProfileInFirestore for UID:', firebaseUser.uid, 'with data:', profileDataToSave);
-        await createUserProfileInFirestore(firebaseUser.uid, profileDataToSave);
-        console.log('[SignupPage] User profile CREATED in Firestore for UID:', firebaseUser.uid);
+        console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid} with data:`, JSON.stringify(profileDataForFirestore, null, 2));
+        // if (auth.currentUser) {
+        //     console.log(`[SignupPage] auth.currentUser before creating Firestore profile: ${auth.currentUser.uid} ${auth.currentUser.email} Display Name: ${auth.currentUser.displayName}`);
+        // } else {
+        //     console.warn('[SignupPage] auth.currentUser is null unexpectedly right before calling createUserProfileInFirestore');
+        // }
+        await createUserProfileInFirestore(firebaseUser.uid, profileDataForFirestore);
+        // console.log('[SignupPage] User profile CREATED in Firestore for UID:', firebaseUser.uid);
 
 
         toast({
@@ -120,7 +126,7 @@ export default function SignupPage() {
         });
         router.push('/login');
       } else {
-        console.error("[SignupPage] Firebase user object was null after createUserWithEmailAndPassword.");
+        // console.error("[SignupPage] Firebase user object was null after createUserWithEmailAndPassword.");
         throw new Error("User creation failed in Firebase Auth.");
       }
     } catch (error: any) {
@@ -253,3 +259,4 @@ export default function SignupPage() {
     </div>
   );
 }
+
