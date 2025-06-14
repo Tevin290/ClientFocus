@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react'; // Explicit import for React hooks
+import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm, type SubmitHandler } from 'react-hook-form';
@@ -67,7 +67,7 @@ export default function SignupPage() {
       password: '',
       confirmPassword: '',
     },
-    mode: 'onChange',
+    mode: 'onChange', // Validate on change for better UX
   });
 
   const emailValue = form.watch('email');
@@ -131,7 +131,6 @@ export default function SignupPage() {
     } else {
       assignedRole = 'client';
     }
-    console.log(`[SignupPage] Determined role for ${normalizedEmail}: ${assignedRole}`);
 
     const profileDataForFirestore: MinimalProfileDataForCreation = {
       email: normalizedEmail,
@@ -144,19 +143,13 @@ export default function SignupPage() {
       const firebaseUser = userCredential.user;
 
       if (!firebaseUser) {
-        // This case should ideally not happen if createUserWithEmailAndPassword succeeds
-        // but Firebase types allow user to be null.
         throw new Error('User creation in Firebase Auth returned null user object.');
       }
       
-      console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}`);
       await updateProfile(firebaseUser, { displayName: data.displayName });
-      console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
       
-      console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid}`);
-      // Pass the entire firebaseUser object as established previously
+      // Pass the entire firebaseUser object
       await createUserProfileInFirestore(firebaseUser, profileDataForFirestore);
-      console.log(`[SignupPage] createUserProfileInFirestore successful for UID: ${firebaseUser.uid}`);
 
       toast({
         title: 'Account Created!',
@@ -167,35 +160,41 @@ export default function SignupPage() {
     } catch (error: any) {
       let errorMessage: string;
       let errorCode: string;
-
-      try {
-        errorMessage = String(error?.message || 'Unknown signup error (message retrieval failed).');
-      } catch (e) {
-        errorMessage = 'Unknown signup error (error.message access failed).';
-      }
-
-      try {
-        errorCode = String(error?.code || 'UNKNOWN_ERROR (code retrieval failed).');
-      } catch (e) {
-        errorCode = 'UNKNOWN_ERROR (error.code access failed).';
-      }
-      
-      // Construct the log message using string concatenation
-      const logMessage = "[SignupPage] Sign Up Error: " + errorMessage + " Code: " + errorCode;
-      console.error(logMessage);
-      
       let toastMessage = 'Signup failed. Please try again.';
-      if (errorCode === 'auth/email-already-in-use') {
-        toastMessage = 'This email address is already in use.';
-      } else if (errorCode === 'auth/weak-password') {
-        toastMessage = 'The password is too weak.';
-      } else if (errorMessage.includes("PERMISSION_DENIED")) { 
-         toastMessage = "Signup failed due to permissions. Please contact support.";
-      } else if (errorMessage.includes("Authentication state error")) {
-        // This specific message comes from our createUserProfileInFirestore check
-        toastMessage = "Signup failed due to an authentication issue. Please try again.";
-      }
 
+      if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
+        errorMessage = 'A "Maximum call stack size exceeded" error occurred internally.';
+        errorCode = 'STACK_OVERFLOW_ERROR';
+        console.error("[SignupPage] Sign Up Error: Maximum call stack size exceeded during signup process.");
+        toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
+      } else {
+        // Safely try to access message and code
+        try {
+          errorMessage = String(error?.message || 'Unknown signup error (message retrieval failed).');
+        } catch (e) {
+          errorMessage = 'Unknown signup error (error.message access failed).';
+        }
+
+        try {
+          errorCode = String(error?.code || 'UNKNOWN_ERROR (code retrieval failed).');
+        } catch (e) {
+          errorCode = 'UNKNOWN_ERROR (error.code access failed).';
+        }
+        
+        // Construct the log message using string concatenation
+        const logMessage = "[SignupPage] Sign Up Error: " + errorMessage + " Code: " + errorCode;
+        console.error(logMessage);
+        
+        if (errorCode === 'auth/email-already-in-use') {
+          toastMessage = 'This email address is already in use.';
+        } else if (errorCode === 'auth/weak-password') {
+          toastMessage = 'The password is too weak.';
+        } else if (errorMessage.includes("PERMISSION_DENIED")) { 
+           toastMessage = "Signup failed due to permissions. Please contact support or check Firestore rules.";
+        } else if (errorMessage.includes("Authentication state error")) {
+          toastMessage = "Signup failed due to an authentication issue. Please try again.";
+        }
+      }
 
       toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
