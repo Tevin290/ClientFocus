@@ -26,7 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
@@ -67,7 +67,7 @@ export default function SignupPage() {
       password: '',
       confirmPassword: '',
     },
-    mode: 'onChange', // Validate on change for better UX
+    mode: 'onChange',
   });
 
   const emailValue = form.watch('email');
@@ -79,7 +79,7 @@ export default function SignupPage() {
         title: 'Firebase Not Configured',
         description: 'Sign up is disabled. Please configure Firebase.',
         variant: 'destructive',
-        duration: Infinity, // Keep this toast until addressed
+        duration: Infinity,
       });
     }
   }, [toast]);
@@ -144,7 +144,6 @@ export default function SignupPage() {
       const firebaseUser = userCredential.user;
 
       if (!firebaseUser) {
-        // This case should ideally not happen if createUserWithEmailAndPassword succeeds
         throw new Error('User creation failed in Firebase Auth (firebaseUser was null).');
       }
       
@@ -153,7 +152,7 @@ export default function SignupPage() {
       console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
       
       console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid}`);
-      await createUserProfileInFirestore(firebaseUser, profileDataForFirestore); // Pass the entire firebaseUser object
+      await createUserProfileInFirestore(firebaseUser, profileDataForFirestore);
       console.log(`[SignupPage] createUserProfileInFirestore successful for UID: ${firebaseUser.uid}`);
 
       toast({
@@ -163,16 +162,19 @@ export default function SignupPage() {
       router.push('/login');
 
     } catch (error: any) {
-      const errorMessage = error.message || 'An unknown error occurred during signup.';
-      const errorCode = error.code || 'UNKNOWN_ERROR';
-      console.error(`[SignupPage] Sign Up Error: ${errorMessage} Code: ${errorCode}`); // Consolidated log
+      const errorMessage = String(error?.message || 'An unknown error occurred during signup.');
+      const errorCode = String(error?.code || 'UNKNOWN_ERROR');
+      
+      // Construct the log message using string concatenation
+      const logMessage = "[SignupPage] Sign Up Error: " + errorMessage + " Code: " + errorCode;
+      console.error(logMessage);
       
       let toastMessage = 'Signup failed. Please try again.';
       if (errorCode === 'auth/email-already-in-use') {
         toastMessage = 'This email address is already in use.';
       } else if (errorCode === 'auth/weak-password') {
         toastMessage = 'The password is too weak.';
-      } else if (errorMessage.includes("PERMISSION_DENIED")) { // Check for permission denied in message
+      } else if (errorMessage.includes("PERMISSION_DENIED")) { 
          toastMessage = "Signup failed due to permissions. Please contact support.";
       } else if (errorMessage.includes("Authentication state error")) {
         toastMessage = "Signup failed due to an authentication issue. Please try again.";
@@ -186,17 +188,18 @@ export default function SignupPage() {
 
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 selection:bg-primary/20">
-      <Card className="w-full max-w-lg shadow-xl rounded-xl border-border/50">
-        <CardHeader className="text-center p-8">
-          <Link href="/" className="flex items-center justify-center gap-2 mb-6">
-            <Building className="h-10 w-10 text-primary" />
-          </Link>
-          <CardTitle className="text-3xl font-headline text-foreground">
-            Join SessionSync
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-background via-muted/30 to-background p-6 selection:bg-primary/20">
+      <Card className="w-full max-w-lg shadow-xl rounded-xl border-border/50 overflow-hidden">
+        <CardHeader className="bg-card p-8 text-center">
+            <Link href="/" className="inline-block mb-6 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-card rounded-md">
+                <Building className="h-12 w-12 text-primary transition-transform duration-300 ease-in-out hover:scale-110" />
+            </Link>
+          <CardTitle className="text-3xl font-headline font-bold text-foreground tracking-tight">
+            Create Your SessionSync Account
           </CardTitle>
-          <CardDescription className="text-muted-foreground pt-1">
-            Create your account to get started. Your role will be auto-assigned based on your email.
+          <CardDescription className="text-muted-foreground pt-2 text-base">
+            Join our platform to streamline your coaching and client management.
+            Your role is auto-assigned based on your email.
           </CardDescription>
           {firebaseNotConfigured && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive text-sm rounded-md flex items-center gap-2">
@@ -208,19 +211,19 @@ export default function SignupPage() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <CardContent className="space-y-6 px-8">
+            <CardContent className="space-y-6 p-8">
               <FormField
                 control={form.control}
                 name="displayName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground/80">Full Name</FormLabel>
+                    <FormLabel className="text-foreground/90 font-medium text-sm">Full Name</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="e.g., Alex Johnson"
                         {...field}
                         disabled={isSigningUp || firebaseNotConfigured}
-                        className="bg-background/70 border-input focus:border-primary"
+                        className="bg-background/80 border-input focus:border-primary h-11 text-base"
                       />
                     </FormControl>
                     <FormMessage />
@@ -232,20 +235,20 @@ export default function SignupPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground/80">Email Address</FormLabel>
+                    <FormLabel className="text-foreground/90 font-medium text-sm">Email Address</FormLabel>
                     <FormControl>
                       <Input
                         type="email"
                         placeholder="you@example.com"
                         {...field}
                         disabled={isSigningUp || firebaseNotConfigured}
-                        className="bg-background/70 border-input focus:border-primary"
+                        className="bg-background/80 border-input focus:border-primary h-11 text-base"
                       />
                     </FormControl>
                      {autoAssignedRole && (
                       <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5 pl-1">
                         {getRoleIcon(autoAssignedRole)}
-                        Based on your email, your role will be: <span className="font-semibold capitalize">{autoAssignedRole}</span>
+                        Anticipated role: <span className="font-semibold capitalize">{autoAssignedRole}</span>
                       </p>
                     )}
                     <FormMessage />
@@ -258,14 +261,14 @@ export default function SignupPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-foreground/80">Password</FormLabel>
+                      <FormLabel className="text-foreground/90 font-medium text-sm">Password</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="••••••••"
+                          placeholder="•••••••• (min. 6 characters)"
                           {...field}
                           disabled={isSigningUp || firebaseNotConfigured}
-                          className="bg-background/70 border-input focus:border-primary"
+                          className="bg-background/80 border-input focus:border-primary h-11 text-base"
                         />
                       </FormControl>
                       <FormMessage />
@@ -277,14 +280,14 @@ export default function SignupPage() {
                   name="confirmPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-foreground/80">Confirm Password</FormLabel>
+                      <FormLabel className="text-foreground/90 font-medium text-sm">Confirm Password</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           placeholder="••••••••"
                           {...field}
                           disabled={isSigningUp || firebaseNotConfigured}
-                          className="bg-background/70 border-input focus:border-primary"
+                          className="bg-background/80 border-input focus:border-primary h-11 text-base"
                         />
                       </FormControl>
                       <FormMessage />
@@ -293,10 +296,10 @@ export default function SignupPage() {
                 />
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col items-center px-8 pb-8 pt-6">
+            <CardFooter className="flex flex-col items-center p-8 pt-2 bg-card">
               <Button
                 type="submit"
-                className="w-full text-lg py-3 h-auto bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-300 ease-in-out transform hover:scale-[1.02] focus:scale-[1.02] focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background"
+                className="w-full text-lg py-3 h-auto bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-300 ease-in-out transform hover:scale-[1.01] focus:scale-[1.01] focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background disabled:bg-primary/70"
                 disabled={isSigningUp || firebaseNotConfigured || !form.formState.isValid}
               >
                 {isSigningUp ? (
@@ -310,9 +313,9 @@ export default function SignupPage() {
                 Already have an account?{' '}
                 <Link
                   href="/login"
-                  className="font-medium text-primary hover:underline hover:text-primary/90"
+                  className="font-medium text-primary hover:underline hover:text-primary/90 flex items-center gap-1 focus:outline-none focus:ring-1 focus:ring-primary focus:rounded-sm"
                 >
-                  Log In
+                   <LogIn className="h-4 w-4"/> Log In
                 </Link>
               </p>
             </CardFooter>
@@ -320,11 +323,10 @@ export default function SignupPage() {
         </Form>
       </Card>
       {firebaseNotConfigured && (
-         <p className="mt-4 text-xs text-destructive text-center">
-            Critical: Firebase is not configured. Please check <code>src/lib/firebase.ts</code>.
+         <p className="mt-4 text-xs text-destructive text-center max-w-md">
+            Critical: Firebase is not configured. Sign up functionality is disabled. Please check your <code>src/lib/firebase.ts</code> file or environment variables.
         </p>
       )}
     </div>
   );
 }
-
