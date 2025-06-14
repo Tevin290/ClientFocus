@@ -144,7 +144,9 @@ export default function SignupPage() {
       const firebaseUser = userCredential.user;
 
       if (!firebaseUser) {
-        throw new Error('User creation failed in Firebase Auth (firebaseUser was null).');
+        // This case should ideally not happen if createUserWithEmailAndPassword succeeds
+        // but Firebase types allow user to be null.
+        throw new Error('User creation in Firebase Auth returned null user object.');
       }
       
       console.log(`[SignupPage] Firebase Auth user created. UID: ${firebaseUser.uid}`);
@@ -152,6 +154,7 @@ export default function SignupPage() {
       console.log(`[SignupPage] Firebase Auth profile updated with displayName: ${data.displayName}`);
       
       console.log(`[SignupPage] Calling createUserProfileInFirestore for UID: ${firebaseUser.uid}`);
+      // Pass the entire firebaseUser object as established previously
       await createUserProfileInFirestore(firebaseUser, profileDataForFirestore);
       console.log(`[SignupPage] createUserProfileInFirestore successful for UID: ${firebaseUser.uid}`);
 
@@ -162,8 +165,20 @@ export default function SignupPage() {
       router.push('/login');
 
     } catch (error: any) {
-      const errorMessage = String(error?.message || 'An unknown error occurred during signup.');
-      const errorCode = String(error?.code || 'UNKNOWN_ERROR');
+      let errorMessage: string;
+      let errorCode: string;
+
+      try {
+        errorMessage = String(error?.message || 'Unknown signup error (message retrieval failed).');
+      } catch (e) {
+        errorMessage = 'Unknown signup error (error.message access failed).';
+      }
+
+      try {
+        errorCode = String(error?.code || 'UNKNOWN_ERROR (code retrieval failed).');
+      } catch (e) {
+        errorCode = 'UNKNOWN_ERROR (error.code access failed).';
+      }
       
       // Construct the log message using string concatenation
       const logMessage = "[SignupPage] Sign Up Error: " + errorMessage + " Code: " + errorCode;
@@ -177,8 +192,10 @@ export default function SignupPage() {
       } else if (errorMessage.includes("PERMISSION_DENIED")) { 
          toastMessage = "Signup failed due to permissions. Please contact support.";
       } else if (errorMessage.includes("Authentication state error")) {
+        // This specific message comes from our createUserProfileInFirestore check
         toastMessage = "Signup failed due to an authentication issue. Please try again.";
       }
+
 
       toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
