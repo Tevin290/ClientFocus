@@ -1,18 +1,20 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Rules for user profiles
     match /users/{userId} {
       // Allow a user to CREATE their own profile document if:
-      // 1. They are authenticated (request.auth.uid is not null).
-      // 2. The document ID ({userId}) they are creating matches their authenticated UID.
-      // 3. The 'uid' field within the document data also matches their authenticated UID.
-      // 4. The 'email' field within the document data matches their authenticated email.
-      // 5. Role assignment is valid:
+      // 1. They are authenticated (request.auth is not null).
+      // 2. The document ID ({userId}) they are trying to create matches their own authenticated UID.
+      // 3. The 'uid' field *inside* the document data also matches their own authenticated UID.
+      // 4. The 'email' field *inside* the document data matches their authenticated email.
+      // 5. The role assignment is valid:
       //    - 'client' role is always allowed.
-      //    - 'coach' or 'admin' roles are only allowed if the authenticated email is from '@hmperform.com'.
-      // 6. All required fields ('uid', 'email', 'displayName', 'role', 'createdAt') are present.
+      //    - 'coach' or 'admin' roles are only allowed if the user's email is from @hmperform.com.
+      // 6. The document contains all required fields: 'uid', 'email', 'displayName', 'role', 'createdAt'.
       allow create: if request.auth != null &&
                        request.auth.uid == userId &&
                        request.resource.data.uid == request.auth.uid &&
@@ -27,28 +29,40 @@ service cloud.firestore {
                        request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt']);
 
       // Allow a user to READ their own profile document if:
-      // 1. They are authenticated (request.auth.uid is not null).
-      // 2. The document ID ({userId}) they are trying to read matches their authenticated UID.
-      allow read: if request.auth.uid != null &&
+      // 1. They are authenticated.
+      // 2. The document ID ({userId}) matches their authenticated UID.
+      allow read: if request.auth != null &&
                      request.auth.uid == userId;
 
       // Allow a user to UPDATE their own profile document if:
       // 1. They are authenticated.
       // 2. The document ID ({userId}) matches their authenticated UID.
-      // 3. They are not trying to change their 'uid' or 'role' field.
-      allow update: if request.auth.uid != null &&
+      // 3. They are not trying to change their 'uid' or 'role' fields (these should be managed differently).
+      // 4. They are not trying to change their 'email' or 'createdAt' fields.
+      allow update: if request.auth != null &&
                        request.auth.uid == userId &&
                        request.resource.data.uid == resource.data.uid &&
-                       request.resource.data.role == resource.data.role;
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.email == resource.data.email &&
+                       request.resource.data.createdAt == resource.data.createdAt;
+                       // Add other fields here that should be immutable or have specific update conditions
 
       // Disallow client-side deletion of user profiles.
       allow delete: if false;
     }
 
+    // Rules for sessions
     match /sessions/{sessionId} {
       // Example: Allow authenticated users to read and write sessions.
-      // Adjust with more specific rules based on coachId, clientId, roles etc. as needed.
+      // Adjust with more specific rules based on coachId, clientId, roles etc.
       allow read, write: if request.auth.uid != null;
+    }
+
+    // Rules for appSettings
+    match /appSettings/{settingsId} {
+      // Example: Allow admins to read/write, authenticated users to read.
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }
