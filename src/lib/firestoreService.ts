@@ -1,9 +1,11 @@
+
 'use server';
 
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase'; // Ensured auth is imported
+import { db, isFirebaseConfigured, auth } from './firebase'; 
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
+import type { User as FirebaseUser } from 'firebase/auth'; // Import FirebaseUser type
 
 function ensureFirebaseIsOperational() {
   if (!isFirebaseConfigured()) {
@@ -24,7 +26,7 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   photoURL?: string | null;
-  createdAt: Timestamp; // Ensure this is part of the type
+  createdAt: Timestamp; 
   coachId?: string;
   stripeCustomerId?: string;
 }
@@ -38,7 +40,7 @@ export type MinimalProfileDataForCreation = {
 
 export interface NewSessionData {
   coachId: string;
-  coachName: string;
+  coachName:string;
   clientId: string;
   clientName: string;
   clientEmail: string;
@@ -61,15 +63,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       const data = userSnap.data();
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
 
-      // Ensure createdAt is handled correctly, assuming it's stored as a Firestore Timestamp
       let createdAtTimestamp: Timestamp;
       if (data.createdAt instanceof Timestamp) {
         createdAtTimestamp = data.createdAt;
       } else if (data.createdAt && typeof data.createdAt.seconds === 'number' && typeof data.createdAt.nanoseconds === 'number') {
-        // Handle cases where it might be a plain object from server/client transfer if not directly a Timestamp instance
         createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
       } else {
-        // Fallback or error if createdAt is missing or in an unexpected format
         console.warn(`[firestoreService] createdAt field for UID ${uid} is missing or not a Firestore Timestamp. Using current time as fallback.`);
         createdAtTimestamp = Timestamp.now();
       }
@@ -107,45 +106,48 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 
 export async function createUserProfileInFirestore(
-  uid: string, // This UID must come from Firebase Auth (userCredential.user.uid)
+  firebaseUser: FirebaseUser, // Changed from uid: string to firebaseUser: FirebaseUser
   profileDataFromSignup: MinimalProfileDataForCreation
 ): Promise<void> {
   ensureFirebaseIsOperational();
-  console.log(`[firestoreService] createUserProfileInFirestore called with UID argument: ${uid}`);
-  console.log(`[firestoreService] Received profileDataFromSignup (contains app-assigned role):`, JSON.stringify(profileDataFromSignup));
-
-  const userDocRef = doc(db, 'users', uid); // Use the auth UID as the document ID
-  console.log(`[firestoreService] Document reference for new user: ${userDocRef.path}`);
-
-  if (!auth.currentUser || auth.currentUser.uid !== uid) {
-    const authStateError = `[firestoreService] Critical Auth Mismatch: auth.currentUser.uid ('${auth.currentUser?.uid}') does not match provided uid ('${uid}') for profile creation. Aborting.`;
-    console.error(authStateError);
-    throw new Error("Authentication state error. Cannot create profile.");
+  
+  if (!firebaseUser || !firebaseUser.uid) {
+    const criticalError = "[firestoreService] Critical Error: firebaseUser object is null or has no UID in createUserProfileInFirestore. Aborting.";
+    console.error(criticalError);
+    throw new Error("Invalid user object provided for profile creation.");
   }
 
-  // Construct the minimal profile object for Firestore
-  // This object structure MUST align with your Firestore security rules for 'create'
+  const uid = firebaseUser.uid; // Use uid from the passed firebaseUser object
+  console.log(`[firestoreService] createUserProfileInFirestore called for UID: ${uid}`);
+  console.log(`[firestoreService] Received profileDataFromSignup:`, JSON.stringify(profileDataFromSignup));
+
+  const userDocRef = doc(db, 'users', uid); 
+  console.log(`[firestoreService] Document reference for new user: ${userDocRef.path}`);
+
+  // The check that was causing the "Authentication state error" is removed.
+  // We now rely on the 'firebaseUser' object passed in, which should be the
+  // user object from a successful createUserWithEmailAndPassword.
+
   const dataForFirestore: {
     uid: string;
     email: string;
     displayName: string;
     role: Exclude<UserRole, null>;
-    createdAt: FieldValue; // Use FieldValue for serverTimestamp
+    createdAt: FieldValue; 
   } = {
-    uid: uid, // Store the UID as a field in the document
+    uid: uid, 
     email: profileDataFromSignup.email.toLowerCase(),
     displayName: profileDataFromSignup.displayName,
     role: profileDataFromSignup.role,
-    createdAt: serverTimestamp(), // Use Firestore server timestamp
+    createdAt: serverTimestamp(), 
   };
   
-  console.log(`[firestoreService] Current auth.currentUser.uid just before setDoc: ${auth.currentUser.uid}. UID for doc path: ${uid}. UID in data: ${dataForFirestore.uid}`);
-  console.log(`[firestoreService] FINAL dataForFirestore being written (minimal):`, JSON.stringify(dataForFirestore, (key, value) =>
+  console.log(`[firestoreService] FINAL dataForFirestore being written:`, JSON.stringify(dataForFirestore, (key, value) =>
     value instanceof Object && value.constructor && value.constructor.name === 'FieldValue' ? '(ServerTimestamp)' : value));
 
   try {
     await setDoc(userDocRef, dataForFirestore);
-    console.log(`[firestoreService] User profile (minimal) successfully CREATED in Firestore for UID: ${uid}`);
+    console.log(`[firestoreService] User profile successfully CREATED in Firestore for UID: ${uid}`);
   } catch (error: any) {
     console.error(`[firestoreService] Detailed Firebase Error in createUserProfileInFirestore for UID ${uid}:`, error);
     let detailedMessage = `Failed to create/update user profile in Firestore for UID ${uid}.`;
@@ -164,7 +166,6 @@ export async function createUserProfileInFirestore(
   }
 }
 
-// ... (rest of the file remains the same: getClientSessions, getCoachSessions, etc.)
 
 export async function getClientSessions(clientId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
@@ -351,3 +352,4 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(detailedMessage);
   }
 }
+
