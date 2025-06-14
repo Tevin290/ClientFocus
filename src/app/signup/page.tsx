@@ -67,7 +67,7 @@ export default function SignupPage() {
       password: '',
       confirmPassword: '',
     },
-    mode: 'onChange', // Validate on change for better UX
+    mode: 'onChange', 
   });
 
   const emailValue = form.watch('email');
@@ -121,23 +121,6 @@ export default function SignupPage() {
 
     setIsSigningUp(true);
 
-    let assignedRole: Exclude<UserRole, null>;
-    const normalizedEmail = data.email.toLowerCase();
-
-    if (ADMIN_EMAILS.includes(normalizedEmail)) {
-      assignedRole = 'admin';
-    } else if (normalizedEmail.endsWith('@hmperform.com')) {
-      assignedRole = 'coach';
-    } else {
-      assignedRole = 'client';
-    }
-
-    const profileDataForFirestore: MinimalProfileDataForCreation = {
-      email: normalizedEmail,
-      displayName: data.displayName,
-      role: assignedRole,
-    };
-
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
@@ -148,8 +131,8 @@ export default function SignupPage() {
       
       await updateProfile(firebaseUser, { displayName: data.displayName });
       
-      // Pass the entire firebaseUser object
-      await createUserProfileInFirestore(firebaseUser, profileDataForFirestore);
+      // For DIAGNOSTIC: createUserProfileInFirestore now only takes firebaseUser
+      await createUserProfileInFirestore(firebaseUser);
 
       toast({
         title: 'Account Created!',

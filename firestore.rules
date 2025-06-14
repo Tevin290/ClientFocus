@@ -7,83 +7,91 @@ service cloud.firestore {
     /* ──────────────── USERS COLLECTION ──────────────── */
     match /users/{userId} {
 
-      // ── CREATE ──
+      // ── CREATE (DIAGNOSTIC) ──
       //  • Authenticated user only
       //  • Doc ID must equal auth.uid
-      //  • DIAGNOSTIC: Simplified required keys for testing stack overflow
-      //  • Role rules:
-      //      - 'client' -> always allowed (if email verified)
-      //      - 'coach' | 'admin' -> only if email ends with @hmperform.com (and email verified)
+      //  • For diagnostics, only requires 'diagnosticTest' and 'createdAt' fields
       allow create: if request.auth != null
                     && userId == request.auth.uid
-                    && request.auth.token.email_verified == true
-                    && (
-                         request.resource.data.role == 'client'
-                         || (
-                              (request.resource.data.role in ['coach', 'admin'])
-                              && request.auth.token.email.matches('.*@hmperform\\.com$')
-                         )
-                       )
-                    // DIAGNOSTIC: Minimal required keys
-                    && request.resource.data.keys().hasAll(['email', 'role', 'createdAt']);
-
+                    && request.resource.data.keys().hasAll(['diagnosticTest', 'createdAt']);
 
       // ── READ ──
       //  • User may read their own document
       //  • Admin may read any user document
       allow read: if request.auth != null
                   && (
-                    userId == request.auth.uid
-                    || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                  );
+                       userId == request.auth.uid
+                       || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                     );
 
       // ── UPDATE ──
       //  • User may update their own document
-      //  • Cannot change role, email, or createdAt. UID is immutable (doc ID).
-      //  • Admin may update any user document (e.g., to assign a coachId, change role)
+      //  • Admin may update any user document
+      //  • Cannot change role or createdAt through this general update rule by non-admins.
+      //    (Admins could have broader update capabilities if needed, defined separately or via backend functions)
       allow update: if request.auth != null
                     && (
-                      ( // User updating their own
-                        userId == request.auth.uid
-                        && request.resource.data.role      == resource.data.role
-                        && request.resource.data.email     == resource.data.email
-                        && request.resource.data.createdAt == resource.data.createdAt
-                        // Allow displayName and photoURL to be changed by user
-                      ) || ( // Admin updating any user
-                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                        // Admin cannot change createdAt for existing doc (usually)
-                        && request.resource.data.createdAt == resource.data.createdAt
-                      )
-                    );
+                         (
+                           userId == request.auth.uid
+                           && request.resource.data.role == resource.data.role // Non-admins cannot change their own role
+                           && request.resource.data.createdAt == resource.data.createdAt
+                         )
+                         || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                       );
+
 
       // ── DELETE ──
-      //  • Client-side deletion not allowed for now. Admins could be allowed via a function.
-      allow delete: if false;
+      //  • Client-side deletion not allowed by default
+      //  • Admin may delete user documents (excluding their own for safety, can be adjusted)
+      allow delete: if request.auth != null
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                    && userId != request.auth.uid; // Admin cannot delete their own account via this rule
     }
 
     /* ──────────────── SESSIONS COLLECTION ──────────────── */
     match /sessions/{sessionId} {
-      // Coach can create sessions for their clients
+      // ── CREATE ──
+      //  • Authenticated user only.
+      //  • Coach creating the session must be the authenticated user (request.auth.uid == request.resource.data.coachId).
+      //  • Required fields: coachId, coachName, clientId, clientName, clientEmail, sessionDate, sessionType, sessionNotes, status.
       allow create: if request.auth != null
-                    && request.resource.data.coachId == request.auth.uid;
-                    // Additional checks: client exists, etc.
+                    && request.auth.uid == request.resource.data.coachId
+                    && request.resource.data.keys().hasAll([
+                         'coachId', 'coachName', 'clientId', 'clientName', 'clientEmail', 
+                         'sessionDate', 'sessionType', 'sessionNotes', 'status', 'createdAt', 'updatedAt'
+                       ]);
+                       // summary and videoLink are optional
 
-      // Coach can read their own sessions. Client can read their own sessions. Admin can read all.
-      allow read: if request.auth != null &&
-                  (
-                    resource.data.coachId == request.auth.uid ||
-                    resource.data.clientId == request.auth.uid ||
+      // ── READ ──
+      //  • Admin can read any session.
+      //  • Coach can read sessions they created (coachId matches auth.uid).
+      //  • Client can read sessions where they are the client (clientId matches auth.uid).
+      allow read: if request.auth != null && (
                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                    || resource.data.coachId == request.auth.uid
+                    || resource.data.clientId == request.auth.uid
                   );
 
-      // Coach can update their own sessions (if not billed). Admin can update any session.
-      allow update: if request.auth != null &&
-                  (
-                    (resource.data.coachId == request.auth.uid && resource.data.status != 'Billed') ||
-                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                  );
-      
-      allow delete: if false; // Or admin only
+      // ── UPDATE ──
+      //  • Admin can update any session.
+      //  • Coach can update sessions they created.
+      //  • Cannot change core identifiers like coachId, clientId.
+      allow update: if request.auth != null
+                    && (
+                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                         || (
+                              resource.data.coachId == request.auth.uid
+                              && request.resource.data.coachId == resource.data.coachId
+                              && request.resource.data.clientId == resource.data.clientId
+                              // other fields can be updated
+                            )
+                       )
+                    && request.resource.data.updatedAt == request.time; // Ensure updatedAt is set to server time
+
+      // ── DELETE ──
+      //  • Only Admins can delete sessions.
+      allow delete: if request.auth != null
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     /* ──────────────── APP SETTINGS DOCS ──────────────── */

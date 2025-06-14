@@ -1,7 +1,7 @@
 
 'use server';
 
-import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue } from 'firebase/firestore';
+import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue, query, where, orderBy, getDocs, addDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured, auth } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
@@ -62,16 +62,20 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     const userSnap = await getDoc(userDocRef);
     if (userSnap.exists()) {
       const data = userSnap.data();
+      // Ensure role is one of the expected values or null
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
 
+      // Ensure createdAt is a Firestore Timestamp object
       let createdAtTimestamp: Timestamp;
       if (data.createdAt instanceof Timestamp) {
         createdAtTimestamp = data.createdAt;
       } else if (data.createdAt && typeof data.createdAt.seconds === 'number' && typeof data.createdAt.nanoseconds === 'number') {
+        // Convert plain object to Timestamp if it has seconds and nanoseconds
         createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
       } else {
-        console.warn(`[firestoreService] createdAt field for UID ${uid} is missing or not a Firestore Timestamp for existing profile. Using current client time as fallback for UserProfile object.`);
-        createdAtTimestamp = Timestamp.now(); // Fallback for constructing the UserProfile object
+        // Fallback or warning if createdAt is missing or in an unexpected format
+        console.warn(`[firestoreService] createdAt field for UID ${uid} is missing or not a Firestore Timestamp. Using current client time as fallback for UserProfile object.`);
+        createdAtTimestamp = Timestamp.now(); // Or handle as an error, depending on requirements
       }
 
       const profile: UserProfile = {
@@ -105,10 +109,9 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   }
 }
 
-
+// Extreme diagnostic version: only takes firebaseUser, writes minimal hardcoded data.
 export async function createUserProfileInFirestore(
-  firebaseUser: FirebaseUser,
-  profileDataFromSignup: MinimalProfileDataForCreation
+  firebaseUser: FirebaseUser
 ): Promise<void> {
   ensureFirebaseIsOperational();
 
@@ -119,46 +122,37 @@ export async function createUserProfileInFirestore(
   }
 
   const uid = firebaseUser.uid;
-  console.log(`[firestoreService] createUserProfileInFirestore called with firebaseUser.uid: ${uid}`);
-  console.log(`[firestoreService] Received profileDataFromSignup:`, JSON.stringify(profileDataFromSignup));
+  console.log(`[firestoreService] DIAGNOSTIC createUserProfileInFirestore called with firebaseUser.uid: ${uid}`);
 
   const userDocRef = doc(db, 'users', uid);
   console.log(`[firestoreService] Document reference for new user: ${userDocRef.path}`);
 
-  // DIAGNOSTIC STEP: Use minimal data and client-side Timestamp.now()
+  // Extremely simplified data for diagnostic purposes
   const dataForFirestore = {
-    email: profileDataFromSignup.email.toLowerCase(),
-    role: profileDataFromSignup.role,
-    // displayName: profileDataFromSignup.displayName, // Temporarily removed for diagnostics
+    diagnosticTest: true,
     createdAt: Timestamp.now(), // Using client-side timestamp for diagnostics
-    // testField: "diagnostic_test" // Added a simple field for diagnostics
   };
 
-  console.log(`[firestoreService] DIAGNOSTIC: Attempting to write MINIMAL dataForFirestore (using client-side Timestamp.now() for createdAt):`, JSON.stringify(dataForFirestore, null, 2));
+  console.log('[firestoreService] DIAGNOSTIC: Attempting to write EXTREMELY MINIMAL dataForFirestore:', JSON.stringify(dataForFirestore, null, 2));
 
   try {
     await setDoc(userDocRef, dataForFirestore);
-    console.log(`[firestoreService] User profile (minimal, using client-side timestamp) should be CREATED in Firestore for UID: ${uid}`);
+    console.log(`[firestoreService] DIAGNOSTIC: User profile (extremely minimal) should be CREATED in Firestore for UID: ${uid}`);
   } catch (error: any) {
-    // This catch block will now be hit if setDoc fails for any reason, including permission denied OR a stack overflow during setDoc itself.
-    console.error(`[firestoreService] Error during setDoc in createUserProfileInFirestore for UID ${uid}:`, error);
-
-    let detailedMessage = `Failed to create/update user profile in Firestore for UID ${uid} (during setDoc).`;
-    if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
-        detailedMessage = `A "Maximum call stack size exceeded" error occurred during the Firestore setDoc operation for UID ${uid}.`;
-        console.error(`[firestoreService] Confirmed: Stack overflow occurred within or during setDoc call for UID ${uid}.`);
+    console.error(`[firestoreService] DIAGNOSTIC: Error during setDoc in createUserProfileInFirestore for UID ${uid}:`, error);
+    let detailedMessage = `DIAGNOSTIC: Failed to create/update user profile (extremely minimal) in Firestore for UID ${uid} (during setDoc).`;
+     if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
+        detailedMessage = `DIAGNOSTIC: A "Maximum call stack size exceeded" error occurred during the Firestore setDoc operation for UID ${uid}.`;
+        console.error(`[firestoreService] DIAGNOSTIC Confirmed: Stack overflow occurred within or during setDoc call for UID ${uid}.`);
     } else {
         if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
         if (error.message) detailedMessage += ` Original error: ${error.message}.`;
         else detailedMessage += ` An unknown error occurred.`;
     }
-
     if (error.message && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw error; // Propagate critical config errors
+      throw error;
     }
-    // Re-throw the processed or original error to be caught by the calling function in signup/page.tsx
-    // which has its own robust error handling for RangeError.
-    throw error;
+    throw error; // Re-throw the original error to be handled by the caller
   }
 }
 
@@ -348,5 +342,3 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(detailedMessage);
   }
 }
-
-    
