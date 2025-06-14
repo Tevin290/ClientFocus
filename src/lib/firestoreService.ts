@@ -32,10 +32,11 @@ export interface UserProfile {
 }
 
 // Data needed from signup form to create the Firestore profile
+// This type is less relevant for the current diagnostic createUserProfileInFirestore
 export type MinimalProfileDataForCreation = {
   email: string;
   displayName: string;
-  role: Exclude<UserRole, null>; // Role is definitively assigned by signup logic
+  role: Exclude<UserRole, null>;
 };
 
 
@@ -62,24 +63,20 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     const userSnap = await getDoc(userDocRef);
     if (userSnap.exists()) {
       const data = userSnap.data();
-      // Ensure role is one of the expected values or null
       const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
 
-      // Ensure createdAt is a Firestore Timestamp object
       let createdAtTimestamp: Timestamp;
       if (data.createdAt instanceof Timestamp) {
         createdAtTimestamp = data.createdAt;
       } else if (data.createdAt && typeof data.createdAt.seconds === 'number' && typeof data.createdAt.nanoseconds === 'number') {
-        // Convert plain object to Timestamp if it has seconds and nanoseconds
         createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
       } else {
-        // Fallback or warning if createdAt is missing or in an unexpected format
         console.warn(`[firestoreService] createdAt field for UID ${uid} is missing or not a Firestore Timestamp. Using current client time as fallback for UserProfile object.`);
-        createdAtTimestamp = Timestamp.now(); // Or handle as an error, depending on requirements
+        createdAtTimestamp = Timestamp.now();
       }
 
       const profile: UserProfile = {
-        uid: userSnap.id, // This is the document ID, which is the user's auth UID
+        uid: userSnap.id,
         email: data.email,
         displayName: data.displayName,
         role,
@@ -109,7 +106,8 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   }
 }
 
-// Extreme diagnostic version: only takes firebaseUser, writes minimal hardcoded data.
+
+// EXTREME DIAGNOSTIC VERSION: Only takes firebaseUser, writes MINIMAL HARDCODED data.
 export async function createUserProfileInFirestore(
   firebaseUser: FirebaseUser
 ): Promise<void> {
@@ -129,7 +127,7 @@ export async function createUserProfileInFirestore(
 
   // Extremely simplified data for diagnostic purposes
   const dataForFirestore = {
-    diagnosticTest: true,
+    diagnosticMarker: true,
     createdAt: Timestamp.now(), // Using client-side timestamp for diagnostics
   };
 
@@ -137,10 +135,10 @@ export async function createUserProfileInFirestore(
 
   try {
     await setDoc(userDocRef, dataForFirestore);
-    console.log(`[firestoreService] DIAGNOSTIC: User profile (extremely minimal) should be CREATED in Firestore for UID: ${uid}`);
+    console.log(`[firestoreService] DIAGNOSTIC: User profile (extremely minimal with diagnosticMarker) should be CREATED in Firestore for UID: ${uid}`);
   } catch (error: any) {
     console.error(`[firestoreService] DIAGNOSTIC: Error during setDoc in createUserProfileInFirestore for UID ${uid}:`, error);
-    let detailedMessage = `DIAGNOSTIC: Failed to create/update user profile (extremely minimal) in Firestore for UID ${uid} (during setDoc).`;
+    let detailedMessage = `DIAGNOSTIC: Failed to create/update user profile (extremely minimal with diagnosticMarker) in Firestore for UID ${uid} (during setDoc).`;
      if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
         detailedMessage = `DIAGNOSTIC: A "Maximum call stack size exceeded" error occurred during the Firestore setDoc operation for UID ${uid}.`;
         console.error(`[firestoreService] DIAGNOSTIC Confirmed: Stack overflow occurred within or during setDoc call for UID ${uid}.`);
@@ -342,3 +340,4 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(detailedMessage);
   }
 }
+

@@ -4,105 +4,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /* ──────────────── USERS COLLECTION ──────────────── */
+    /* ──────────────── USERS COLLECTION (EXTREME DIAGNOSTIC) ──────────────── */
     match /users/{userId} {
 
-      // ── CREATE (DIAGNOSTIC) ──
+      // ── CREATE (EXTREME DIAGNOSTIC) ──
       //  • Authenticated user only
       //  • Doc ID must equal auth.uid
-      //  • For diagnostics, only requires 'diagnosticTest' and 'createdAt' fields
+      //  • Document must contain 'diagnosticMarker' (boolean) and 'createdAt' (timestamp)
       allow create: if request.auth != null
                     && userId == request.auth.uid
-                    && request.resource.data.keys().hasAll(['diagnosticTest', 'createdAt']);
+                    && request.resource.data.keys().hasAll(['diagnosticMarker', 'createdAt'])
+                    && request.resource.data.diagnosticMarker == true
+                    && request.resource.data.createdAt is timestamp;
 
       // ── READ ──
-      //  • User may read their own document
-      //  • Admin may read any user document
+      //  • User may read their own document if it exists and they are authenticated.
+      //  • This rule won't prevent "PERMISSION_DENIED" if the document doesn't exist,
+      //    which is expected if the create operation fails.
       allow read: if request.auth != null
-                  && (
-                       userId == request.auth.uid
-                       || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                     );
+                  && request.auth.uid == userId;
 
-      // ── UPDATE ──
-      //  • User may update their own document
-      //  • Admin may update any user document
-      //  • Cannot change role or createdAt through this general update rule by non-admins.
-      //    (Admins could have broader update capabilities if needed, defined separately or via backend functions)
-      allow update: if request.auth != null
-                    && (
-                         (
-                           userId == request.auth.uid
-                           && request.resource.data.role == resource.data.role // Non-admins cannot change their own role
-                           && request.resource.data.createdAt == resource.data.createdAt
-                         )
-                         || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                       );
-
+      // ── UPDATE (Restrictive for safety during diagnostics) ──
+      allow update: if false; // Disallow updates during this diagnostic phase
 
       // ── DELETE ──
-      //  • Client-side deletion not allowed by default
-      //  • Admin may delete user documents (excluding their own for safety, can be adjusted)
-      allow delete: if request.auth != null
-                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                    && userId != request.auth.uid; // Admin cannot delete their own account via this rule
+      allow delete: if false;
     }
 
     /* ──────────────── SESSIONS COLLECTION ──────────────── */
     match /sessions/{sessionId} {
-      // ── CREATE ──
-      //  • Authenticated user only.
-      //  • Coach creating the session must be the authenticated user (request.auth.uid == request.resource.data.coachId).
-      //  • Required fields: coachId, coachName, clientId, clientName, clientEmail, sessionDate, sessionType, sessionNotes, status.
-      allow create: if request.auth != null
-                    && request.auth.uid == request.resource.data.coachId
-                    && request.resource.data.keys().hasAll([
-                         'coachId', 'coachName', 'clientId', 'clientName', 'clientEmail', 
-                         'sessionDate', 'sessionType', 'sessionNotes', 'status', 'createdAt', 'updatedAt'
-                       ]);
-                       // summary and videoLink are optional
-
-      // ── READ ──
-      //  • Admin can read any session.
-      //  • Coach can read sessions they created (coachId matches auth.uid).
-      //  • Client can read sessions where they are the client (clientId matches auth.uid).
-      allow read: if request.auth != null && (
-                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                    || resource.data.coachId == request.auth.uid
-                    || resource.data.clientId == request.auth.uid
-                  );
-
-      // ── UPDATE ──
-      //  • Admin can update any session.
-      //  • Coach can update sessions they created.
-      //  • Cannot change core identifiers like coachId, clientId.
-      allow update: if request.auth != null
-                    && (
-                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                         || (
-                              resource.data.coachId == request.auth.uid
-                              && request.resource.data.coachId == resource.data.coachId
-                              && request.resource.data.clientId == resource.data.clientId
-                              // other fields can be updated
-                            )
-                       )
-                    && request.resource.data.updatedAt == request.time; // Ensure updatedAt is set to server time
-
-      // ── DELETE ──
-      //  • Only Admins can delete sessions.
-      allow delete: if request.auth != null
-                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read, write: if request.auth != null;
     }
 
     /* ──────────────── APP SETTINGS DOCS ──────────────── */
     match /appSettings/{settingsId} {
-      // Any signed-in user can read app settings
       allow read: if request.auth != null;
-
-      // Only admins may write
       allow write: if request.auth != null
                    && get(/databases/$(database)/documents/users/$(request.auth.uid))
-                        .data.role == 'admin';
+                        .data.role == 'admin'; // This will fail if admin profile not created
     }
   }
 }
+
