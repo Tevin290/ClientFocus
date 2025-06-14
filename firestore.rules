@@ -4,72 +4,78 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper function to determine role based on email
+    function getRole(email) {
+      let adminEmails = string(resource.data.get('NEXT_PUBLIC_ADMIN_EMAILS', 'hello@hmperform.com')).split(',');
+      if (email.matches('.*@hmperform\\.com$')) {
+        if (email in adminEmails) {
+          return 'admin';
+        }
+        return 'coach';
+      }
+      return 'client';
+    }
+
     // Users Collection
     match /users/{userId} {
-      // Allow create only if the user is authenticated, the userId matches their auth uid,
-      // and the document contains the diagnosticMarker and createdAt fields.
-      // This is an EXTREME DIAGNOSTIC RULE.
-      allow create: if request.auth != null &&
-                       request.auth.uid == userId &&
-                       request.resource.data.containsKey('diagnosticMarker') &&
-                       request.resource.data.diagnosticMarker == true &&
-                       request.resource.data.containsKey('createdAt') &&
-                       request.resource.data.createdAt is timestamp;
+      // EXTREME DIAGNOSTIC CREATE RULE:
+      // Allow create if user is authenticated, userId matches their auth.uid,
+      // and the document contains 'diagnosticMarker' set to true and 'createdAt' is a timestamp.
+      allow create: if request.auth.uid != null &&
+                     request.auth.uid == userId &&
+                     request.resource.data.containsKey('diagnosticMarker') &&
+                     request.resource.data.diagnosticMarker == true &&
+                     request.resource.data.createdAt is timestamp;
 
-      // Allow read if the user is authenticated and is requesting their own document.
-      allow read: if request.auth != null && request.auth.uid == userId;
-
-      // Allow update if the user is authenticated and is updating their own document.
-      // For now, this is a general update rule. Specific field validations can be added.
-      allow update: if request.auth != null && request.auth.uid == userId;
-
-      // Generally, disallow delete for user profiles unless explicitly needed.
-      allow delete: if false;
+      allow read: if request.auth.uid != null && request.auth.uid == userId;
+      allow update: if request.auth.uid != null && request.auth.uid == userId;
+      // Admins can manage any user profile (be cautious with this in production)
+      // allow read, update, delete: if request.auth.uid != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if request.auth.uid != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can delete
     }
 
     // Sessions Collection
     match /sessions/{sessionId} {
-      // Allow create if user is authenticated and is a coach, and required fields are present.
-      allow create: if request.auth != null &&
-                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
-                       request.resource.data.coachId == request.auth.uid &&
-                       request.resource.data.containsKey('clientName') &&
-                       request.resource.data.containsKey('clientEmail') &&
-                       request.resource.data.containsKey('sessionDate') &&
+      allow create: if request.auth.uid != null && 
+                       request.resource.data.coachId == request.auth.uid && // Coach creating session must be the authenticated user
+                       request.resource.data.status == 'Logged' && // Initial status must be Logged
                        request.resource.data.sessionDate is timestamp &&
-                       request.resource.data.containsKey('sessionType') &&
-                       request.resource.data.containsKey('sessionNotes') &&
-                       request.resource.data.containsKey('status') &&
-                       (request.resource.data.status == 'Logged' || request.resource.data.status == 'Reviewed' || request.resource.data.status == 'Billed');
+                       request.resource.data.createdAt is timestamp &&
+                       request.resource.data.updatedAt is timestamp &&
+                       request.resource.data.coachId is string &&
+                       request.resource.data.coachName is string &&
+                       request.resource.data.clientId is string &&
+                       request.resource.data.clientName is string &&
+                       request.resource.data.clientEmail is string &&
+                       request.resource.data.sessionType in ['Full', 'Half'] &&
+                       request.resource.data.sessionNotes is string &&
+                       (!request.resource.data.containsKey('summary') || request.resource.data.summary is string) &&
+                       (!request.resource.data.containsKey('videoLink') || request.resource.data.videoLink is string);
+                       
+      allow read: if request.auth.uid != null && 
+                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || // Admin can read any session
+                      resource.data.coachId == request.auth.uid || // Coach can read their own sessions
+                      resource.data.clientId == request.auth.uid);   // Client can read their own sessions
+
+      allow update: if request.auth.uid != null &&
+                       (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || // Admin can update any session (e.g., status)
+                        (resource.data.coachId == request.auth.uid && request.resource.data.status == resource.data.status)); // Coach can update their session if status isn't changing (e.g. notes)
+                        // More granular checks for specific fields might be needed for coaches (e.g., coach cannot change status once logged)
+                        // For admin updates on status:
+                        // Ensure only valid status transitions. For example:
+                        //   (request.resource.data.status in ['Reviewed', 'Billed'] && resource.data.status == 'Logged') ||
+                        //   (request.resource.data.status == 'Billed' && resource.data.status == 'Reviewed')
 
 
-      // Allow read:
-      // 1. Admin can read any session.
-      // 2. Coach can read sessions they created.
-      // 3. Client can read their own sessions.
-      allow read: if request.auth != null &&
-                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' && resource.data.coachId == request.auth.uid) ||
-                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' && resource.data.clientId == request.auth.uid));
-
-      // Allow update:
-      // 1. Admin can update any session (e.g., status).
-      // 2. Coach can update sessions they created (e.g., notes, videoLink, status before billing).
-      // Ensure coaches cannot change status to 'Billed' directly unless logic allows.
-      // For now, allow coach to update if it's their session, admin can update anything.
-      allow update: if request.auth != null &&
-                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-                       (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach' &&
-                        resource.data.coachId == request.auth.uid &&
-                        // Optional: Prevent coach from changing status once Billed if that's a business rule
-                        (resource.data.status != 'Billed' || request.resource.data.status == resource.data.status )
-                       )
-                      );
-
-      // Generally, disallow delete for sessions unless explicitly needed by an admin.
-      allow delete: if request.auth != null &&
-                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if request.auth.uid != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; // Only admins can delete sessions
     }
+
+    // AppSettings Collection (Example for Stripe keys, if stored in Firestore)
+    // match /appSettings/{settingId} {
+    //   allow read: if request.auth.uid != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    //   allow write: if request.auth.uid != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // }
   }
 }
+
     

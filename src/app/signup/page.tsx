@@ -30,12 +30,10 @@ import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, B
 
 import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
-import { createUserProfileInFirestore } from '@/lib/firestoreService'; // Updated signature
+import { createUserProfileInFirestore } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
 
-// This ADMIN_EMAILS constant will NOT be used by the diagnostic createUserProfileInFirestore,
-// but is kept for when normal functionality is restored.
 const ADMIN_EMAILS = (
   process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['hello@hmperform.com']
 );
@@ -122,10 +120,11 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
+    let firebaseUser: FirebaseUser | null = null;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const firebaseUser = userCredential.user;
+      firebaseUser = userCredential.user;
 
       if (!firebaseUser) {
         throw new Error('User creation in Firebase Auth returned null user object.');
@@ -133,8 +132,7 @@ export default function SignupPage() {
       
       await updateProfile(firebaseUser, { displayName: data.displayName });
       
-      // Pass the entire firebaseUser object for profile creation
-      // This uses the EXTREME DIAGNOSTIC version of createUserProfileInFirestore
+      // EXTREME DIAGNOSTIC VERSION: Pass only firebaseUser
       await createUserProfileInFirestore(firebaseUser); 
 
       toast({
@@ -146,7 +144,7 @@ export default function SignupPage() {
     } catch (error: any) {
       let errorMessage: string;
       let errorCode: string;
-      let toastMessage = 'Signup failed. Please try again.';
+      let toastMessage: string;
 
       if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
         errorMessage = 'A "Maximum call stack size exceeded" error occurred internally.';
@@ -154,7 +152,6 @@ export default function SignupPage() {
         console.error("[SignupPage] Sign Up Error: Maximum call stack size exceeded during signup process.");
         toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
       } else {
-        // Safely try to access message and code
         try {
           errorMessage = String(error?.message || 'Unknown signup error (message retrieval failed).');
         } catch (e) {
@@ -167,10 +164,10 @@ export default function SignupPage() {
           errorCode = 'UNKNOWN_ERROR (error.code access failed).';
         }
         
-        // Construct the log message using string concatenation
         const logMessage = "[SignupPage] Sign Up Error: " + errorMessage + " Code: " + errorCode;
         console.error(logMessage);
         
+        toastMessage = 'Signup failed. Please try again.';
         if (errorCode === 'auth/email-already-in-use') {
           toastMessage = 'This email address is already in use.';
         } else if (errorCode === 'auth/weak-password') {
@@ -181,7 +178,6 @@ export default function SignupPage() {
           toastMessage = "Signup failed due to an authentication issue. Please try again.";
         }
       }
-
       toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
@@ -332,4 +328,6 @@ export default function SignupPage() {
     </div>
   );
 }
+    
+
     
