@@ -8,7 +8,7 @@ import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { getUserProfile, type UserProfile } from '@/lib/firestoreService';
 import { useRouter, usePathname } from 'next/navigation';
 
-export type UserRole = 'admin' | 'coach' | 'client' | null;
+export type UserRole = 'admin' | 'super-admin' | 'coach' | 'client' | null;
 
 interface AuthUser {
   uid: string;
@@ -88,8 +88,12 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
     // Case 1: User is authenticated and has a role
     if (user && role) {
       if (isAuthPage) {
-        console.log(`[RoleContext] User is on auth page. Redirecting to /${role}/dashboard...`);
-        router.replace(`/${role}/dashboard`);
+        let dashboardPath = `/${role}/dashboard`;
+        if (role === 'super-admin') {
+            dashboardPath = '/admin/dashboard';
+        }
+        console.log(`[RoleContext] User is on auth page. Redirecting to ${dashboardPath}...`);
+        router.replace(dashboardPath);
       }
       // If user is on another page, they are allowed to be there. Do nothing.
     } 

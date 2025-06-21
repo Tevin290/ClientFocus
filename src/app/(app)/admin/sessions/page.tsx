@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -21,7 +21,7 @@ import { useRole } from '@/context/role-context';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-type SessionStatus = 'Under Review' | 'Approved' | 'Billed';
+type SessionStatus = 'Under Review' | 'Approved' | 'Denied' | 'Billed';
 // Session type is imported from firestoreService via session-card
 
 export default function AdminSessionReviewPage() {
@@ -41,14 +41,14 @@ export default function AdminSessionReviewPage() {
       return;
     }
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'super-admin') {
       const fetchSessions = async () => {
         setIsLoading(true);
         try {
-          const fetchedSessions = await getAllSessionsForAdmin();
+          const fetchedSessions = await getAllSessionsForAdmin(role);
           setSessions(fetchedSessions);
         } catch (error) {
-          console.error("Failed to fetch sessions for admin:", error);
+          console.error("Failed to fetch sessions for review:", error);
           toast({ title: "Error", description: "Could not load sessions.", variant: "destructive" });
         } finally {
           setIsLoading(false);
@@ -68,15 +68,12 @@ export default function AdminSessionReviewPage() {
     }
     try {
       await updateSession(sessionId, { status: newStatus });
-      setSessions(prevSessions => 
-        prevSessions.map(session => 
-          session.id === sessionId ? { ...session, status: newStatus } : session
-        )
-      );
+      // Remove the session from the list in the UI as its status has been actioned
+      setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
       toast({
         title: `Session ${newStatus}`,
-        description: `Session ${sessionId} has been marked as ${newStatus.toLowerCase()}.`,
-        variant: newStatus === 'Billed' ? "default" : undefined, // 'default' for success, undefined for others
+        description: `Session has been marked as ${newStatus.toLowerCase()}.`,
+        variant: newStatus === 'Billed' ? "default" : undefined,
       });
     } catch (error) {
       console.error(`Error updating session ${sessionId} to ${newStatus}:`, error);
@@ -90,6 +87,8 @@ export default function AdminSessionReviewPage() {
         return <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200"><Clock className="mr-1 h-3 w-3" />Under Review</Badge>;
       case 'Approved':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200"><CheckCircle className="mr-1 h-3 w-3" />Approved</Badge>;
+      case 'Denied':
+        return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" />Denied</Badge>;
       case 'Billed':
         return <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200"><DollarSign className="mr-1 h-3 w-3" />Billed</Badge>;
       default:
@@ -109,7 +108,7 @@ export default function AdminSessionReviewPage() {
     );
   }
 
-  if (role !== 'admin') {
+  if (role !== 'admin' && role !== 'super-admin') {
      return (
       <div>
         <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
@@ -137,18 +136,25 @@ export default function AdminSessionReviewPage() {
     );
   }
 
+  const pageTitle = role === 'super-admin' ? "Billing Review" : "Session Approval";
+  const pageDescription = role === 'super-admin' ? "Review approved sessions that are ready for billing." : "Approve or deny newly submitted coaching sessions.";
+
 
   return (
     <div>
-      <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
+      <PageHeader title={pageTitle} description={pageDescription} />
       <Card className="shadow-light">
         <CardHeader>
-          <CardTitle className="font-headline">Submitted Sessions</CardTitle>
-          <CardDescription>Awaiting approval or billing.</CardDescription>
+          <CardTitle className="font-headline">
+            {role === 'super-admin' ? 'Awaiting Billing' : 'Awaiting Approval'}
+          </CardTitle>
+          <CardDescription>
+             {sessions.length === 0 ? "There are no sessions in this queue." : `Showing ${sessions.length} sessions.`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {sessions.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No sessions found.</p>
+            <p className="text-muted-foreground text-center py-8">The queue is empty.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -180,12 +186,19 @@ export default function AdminSessionReviewPage() {
                       <Button variant="outline" size="sm" onClick={() => alert(`Notes for ${session.clientName}:\n${session.notes || session.summary || 'No notes available.'}`)} className="hover:border-primary" aria-label="View Notes">
                         <FileText className="h-4 w-4" />
                       </Button>
-                      {session.status === 'Under Review' && (
-                        <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Approved')} className="hover:border-primary">
-                          <CheckCircle className="mr-1 h-4 w-4" /> Approve
-                        </Button>
+                      
+                      {role === 'admin' && session.status === 'Under Review' && (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Approved')} className="hover:border-primary">
+                            <CheckCircle className="mr-1 h-4 w-4" /> Approve
+                          </Button>
+                           <Button variant="destructive" size="sm" onClick={() => handleUpdateStatus(session.id, 'Denied')}>
+                            <XCircle className="mr-1 h-4 w-4" /> Deny
+                          </Button>
+                        </>
                       )}
-                      {session.status === 'Approved' && (
+                      
+                      {role === 'super-admin' && session.status === 'Approved' && (
                         <Button variant="default" size="sm" onClick={() => handleUpdateStatus(session.id, 'Billed')} className="bg-success hover:bg-success/90 text-success-foreground">
                           <DollarSign className="mr-1 h-4 w-4" /> Bill Client
                         </Button>
@@ -199,7 +212,7 @@ export default function AdminSessionReviewPage() {
         </CardContent>
          <CardFooter>
             <p className="text-xs text-muted-foreground">
-              Total Sessions: {sessions.length}
+              Total Sessions in Queue: {sessions.length}
             </p>
           </CardFooter>
       </Card>

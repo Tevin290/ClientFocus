@@ -60,11 +60,11 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard, roles: ['admin'] },
-  { href: '/admin/sessions', label: 'Session Review', icon: ClipboardList, roles: ['admin'] },
-  { href: '/admin/billing', label: 'Billing', icon: CreditCard, roles: ['admin'] },
-  { href: '/admin/users', label: 'User Management', icon: Users, roles: ['admin'], disabled: true }, // Keep disabled for now
-  { href: '/admin/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
+  { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard, roles: ['admin', 'super-admin'] },
+  { href: '/admin/sessions', label: 'Session Review', icon: ClipboardList, roles: ['admin', 'super-admin'] },
+  { href: '/admin/billing', label: 'Billing', icon: CreditCard, roles: ['admin', 'super-admin'] },
+  { href: '/admin/users', label: 'User Management', icon: Users, roles: ['admin', 'super-admin'], disabled: true },
+  { href: '/admin/settings', label: 'Settings', icon: Settings, roles: ['admin', 'super-admin'] },
   
   { href: '/coach/dashboard', label: 'Coach Dashboard', icon: BarChart3, roles: ['coach'] },
   { href: '/coach/log-session', label: 'Log Session', icon: FileText, roles: ['coach'] },
@@ -190,7 +190,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-4">
-            {role === 'admin' && (
+            {(role === 'admin' || role === 'super-admin') && (
               <div className="flex items-center space-x-2">
                 <Switch
                   id="stripe-test-mode"
@@ -230,7 +230,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none font-headline">{userProfile?.displayName || 'SessionSync User'}</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {userProfile?.email || (role ? `${role.charAt(0).toUpperCase() + role.slice(1)} Account` : 'No Role')}
+                       {userProfile?.email || (role ? `${role.replace('-', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Account` : 'No Role')}
                     </p>
                   </div>
                 </DropdownMenuLabel>

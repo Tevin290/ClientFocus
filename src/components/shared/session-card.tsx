@@ -1,7 +1,7 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Video, FileText, ClockIcon, Users, CheckCircle, DollarSign } from "lucide-react";
+import { CalendarDays, Video, FileText, ClockIcon, Users, CheckCircle, DollarSign, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface Session {
@@ -14,7 +14,7 @@ export interface Session {
   notes?: string; // Could be full notes or summary
   summary?: string;
   videoLink?: string;
-  status?: 'Under Review' | 'Approved' | 'Billed'; // For admin/coach views
+  status?: 'Under Review' | 'Approved' | 'Denied' | 'Billed'; // For admin/coach views
 }
 
 interface SessionCardProps {
@@ -36,6 +36,8 @@ export function SessionCard({ session, showActions = false, onViewDetails }: Ses
         return <CheckCircle className="mr-2 h-4 w-4 text-yellow-500" />;
       case 'Billed':
         return <DollarSign className="mr-2 h-4 w-4 text-green-500" />;
+      case 'Denied':
+        return <XCircle className="mr-2 h-4 w-4 text-destructive" />;
       default:
         return <ClockIcon className="mr-2 h-4 w-4 text-primary" />;
     }

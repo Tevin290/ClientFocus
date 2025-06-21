@@ -26,7 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, ChevronsRight } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, ChevronsRight, Crown } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
@@ -42,8 +42,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 // This function determines the role based on email address rules.
 const determineRole = (email: string | null): UserRole => {
   const normalizedEmail = (email || '').toLowerCase();
+  const SUPER_ADMIN_EMAIL = 'supersuper@hmperform.com';
   const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || ['hello@hmperform.com']);
 
+  if (normalizedEmail === SUPER_ADMIN_EMAIL) {
+    return 'super-admin';
+  }
   if (ADMIN_EMAILS.includes(normalizedEmail)) {
     return 'admin';
   }
@@ -155,6 +159,7 @@ export default function SignupPage() {
   const getRoleIcon = (role: UserRole | null) => {
     if (!role) return <Mail className="h-4 w-4 text-muted-foreground" />;
     switch (role) {
+      case 'super-admin': return <Crown className="h-4 w-4 text-yellow-500" />;
       case 'admin': return <ShieldCheck className="h-4 w-4 text-primary" />;
       case 'coach': return <Briefcase className="h-4 w-4 text-blue-500" />;
       case 'client': return <User className="h-4 w-4 text-green-500" />;
@@ -293,7 +298,7 @@ export default function SignupPage() {
                     {autoAssignedRole && (
                       <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5 pl-1">
                         {getRoleIcon(autoAssignedRole)}
-                        Anticipated role: <span className="font-semibold capitalize">{autoAssignedRole}</span>
+                        Anticipated role: <span className="font-semibold capitalize">{autoAssignedRole?.replace('-', ' ')}</span>
                       </p>
                     )}
                     <FormMessage />
@@ -435,5 +440,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
-    

@@ -41,7 +41,7 @@ export interface NewSessionData {
   videoLink?: string | '';
   sessionNotes: string;
   summary?: string | '';
-  status: 'Under Review' | 'Approved' | 'Billed';
+  status: 'Under Review' | 'Approved' | 'Denied' | 'Billed';
 }
 
 export async function createUserProfileInFirestore(
@@ -70,7 +70,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     const userSnap = await getDoc(userDocRef);
     if (userSnap.exists()) {
       const data = userSnap.data();
-      const role = ['admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
+      const role = ['admin', 'super-admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
 
       let createdAtTimestamp: Timestamp;
       if (data.createdAt instanceof Timestamp) {
@@ -225,11 +225,23 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
   }
 }
 
-export async function getAllSessionsForAdmin(): Promise<Session[]> {
+export async function getAllSessionsForAdmin(role: UserRole): Promise<Session[]> {
   ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
-    const q = query(sessionsCol, orderBy('sessionDate', 'desc'));
+    let q;
+
+    if (role === 'admin') {
+      // Admin sees sessions that are 'Under Review' to approve/deny
+      q = query(sessionsCol, where('status', '==', 'Under Review'), orderBy('sessionDate', 'desc'));
+    } else if (role === 'super-admin') {
+      // Super Admin sees 'Approved' sessions to bill them
+      q = query(sessionsCol, where('status', '==', 'Approved'), orderBy('sessionDate', 'desc'));
+    } else {
+      console.warn(`getAllSessionsForAdmin called with an invalid role: ${role}`);
+      return [];
+    }
+
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
@@ -244,6 +256,9 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     });
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getAllSessionsForAdmin:`, error);
+     if (error.code === 'failed-precondition') {
+      throw new Error(`Failed to fetch sessions for review. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
+    }
     throw new Error(`Failed to fetch all sessions for admin. See server logs for details.`);
   }
 }
