@@ -29,14 +29,10 @@ import {
 import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
-import { auth, isFirebaseConfigured } from '@/lib/firebase';
-import { createUserProfileInFirestore } from '@/lib/firestoreService';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
-
-const ADMIN_EMAILS = (
-  process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || ['hello@hmperform.com']
-);
 
 const signupFormSchema = z
   .object({
@@ -51,6 +47,22 @@ const signupFormSchema = z
   });
 
 type SignupFormValues = z.infer<typeof signupFormSchema>;
+
+// This function determines the role based on email address rules.
+// It is now a local helper function for the signup page.
+const determineRole = (email: string | null): UserRole => {
+  const normalizedEmail = (email || '').toLowerCase();
+  const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || ['hello@hmperform.com']);
+
+  if (ADMIN_EMAILS.includes(normalizedEmail)) {
+    return 'admin';
+  }
+  if (normalizedEmail.endsWith('@hmperform.com')) {
+    return 'coach';
+  }
+  return 'client';
+};
+
 
 export default function SignupPage() {
   const router = useRouter();
@@ -86,14 +98,8 @@ export default function SignupPage() {
 
   React.useEffect(() => {
     if (emailValue && z.string().email().safeParse(emailValue).success) {
-      const normalizedEmail = emailValue.toLowerCase();
-      if (ADMIN_EMAILS.includes(normalizedEmail)) {
-        setAutoAssignedRole('admin');
-      } else if (normalizedEmail.endsWith('@hmperform.com')) {
-        setAutoAssignedRole('coach');
-      } else {
-        setAutoAssignedRole('client');
-      }
+      const role = determineRole(emailValue);
+      setAutoAssignedRole(role);
     } else {
       setAutoAssignedRole(null);
     }
@@ -111,17 +117,14 @@ export default function SignupPage() {
 
   const onSubmit: SubmitHandler<SignupFormValues> = async (data) => {
     if (firebaseNotConfigured) {
-      toast({
-        title: 'Sign Up Disabled',
-        description: 'Firebase is not configured.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Sign Up Disabled', description: 'Firebase is not configured.', variant: 'destructive' });
       return;
     }
 
     setIsSigningUp(true);
 
     try {
+      // 1. Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
 
@@ -129,11 +132,23 @@ export default function SignupPage() {
         throw new Error('User creation in Firebase Auth returned null user object.');
       }
       
+      // 2. Update the user's display name in their Auth profile
       await updateProfile(firebaseUser, { displayName: data.displayName });
       
-      // The user object is automatically updated, no need to reload
-      // Now create the corresponding profile in Firestore
-      await createUserProfileInFirestore(firebaseUser); 
+      // 3. Create the user's profile document in Firestore
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      const role = determineRole(firebaseUser.email);
+      
+      const userProfileData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: data.displayName,
+        role: role,
+        createdAt: serverTimestamp(),
+        photoURL: firebaseUser.photoURL || null,
+      };
+
+      await setDoc(userDocRef, userProfileData);
 
       toast({
         title: 'Account Created!',
@@ -142,11 +157,9 @@ export default function SignupPage() {
       router.push('/login');
 
     } catch (error: any) {
-      console.error("[SignupPage] Sign Up Error:", error);
-      
       let toastMessage = 'An unexpected error occurred during sign up. Please try again.';
-      if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
-          toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
+      if (error instanceof RangeError) {
+        toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
       } else if (error.code) {
           switch (error.code) {
               case 'auth/email-already-in-use':
@@ -156,7 +169,7 @@ export default function SignupPage() {
                   toastMessage = 'The password is too weak.';
                   break;
               case 'permission-denied':
-                   toastMessage = "Signup failed due to permissions. Please check Firestore rules and contact support.";
+                   toastMessage = "Signup failed due to permissions. Please check your Firestore rules and contact support.";
                    break;
               default:
                    toastMessage = `An error occurred: ${error.code}. Please try again.`;

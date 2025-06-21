@@ -4,57 +4,78 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users collection
+    // Helper function to determine role based on email address.
+    // This logic should mirror the `determineRole` function in the app code.
+    function getRole(email) {
+      // NOTE: Your NEXT_PUBLIC_ADMIN_EMAILS must be hardcoded here or stored
+      // in a readable Firestore document if you need them to be dynamic.
+      // For now, we use the default.
+      let adminEmails = ['hello@hmperform.com']; 
+      
+      if (email in adminEmails) {
+        return 'admin';
+      }
+      if (email.matches('.*@hmperform\\.com$')) {
+        return 'coach';
+      }
+      return 'client';
+    }
+    
     match /users/{userId} {
-      // Diagnostic create rule:
-      // Allows creating a user document if the user is authenticated,
-      // the document ID matches their UID, and it only contains
-      // 'diagnosticMarker' (boolean true) and 'createdAt' (timestamp) fields.
-      allow create: if request.auth != null &&
+      // ANYONE can create their own user profile document IF:
+      // 1. They are authenticated.
+      // 2. They are creating a document for their OWN UID.
+      // 3. The `uid` in the document matches their auth UID.
+      // 4. The `email` in the document matches their auth email.
+      // 5. The `displayName` is a non-empty string.
+      // 6. The `role` being assigned matches the business logic in the getRole function.
+      // 7. The `createdAt` timestamp matches the server time of the request.
+      allow create: if request.auth != null && 
                        request.auth.uid == userId &&
-                       request.resource.data.keys().hasAll(['diagnosticMarker', 'createdAt']) &&
-                       request.resource.data.size() == 2 &&
-                       request.resource.data.diagnosticMarker == true &&
-                       request.resource.data.createdAt is timestamp;
+                       request.resource.data.uid == request.auth.uid &&
+                       request.resource.data.email == request.auth.token.email &&
+                       request.resource.data.displayName is string &&
+                       request.resource.data.displayName.size() > 2 &&
+                       request.resource.data.role == getRole(request.auth.token.email) &&
+                       request.resource.data.createdAt == request.time;
+      
+      // A user can read their OWN profile.
+      // An admin can read ANY user profile.
+      allow read: if request.auth != null && 
+                     (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
 
-      // Allow read only if the user is authenticated and is requesting their own document.
-      allow read: if request.auth != null &&
-                     request.auth.uid == userId;
-
-      // Allow update if user is authenticated and is updating their own document.
-      // (Further restrictions on updatable fields would typically be added here).
+      // A user can update their OWN profile, but cannot change their role.
+      // An admin can update ANY user profile, including the role.
       allow update: if request.auth != null &&
-                       request.auth.uid == userId;
-
-      // Disallow delete for now.
-      allow delete: if false;
+                       ((request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
+                       (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+      
+      // Only an admin can delete user profiles.
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Sessions collection
     match /sessions/{sessionId} {
-      // Allow create if the user is authenticated (e.g., a coach)
-      // and provides necessary fields.
-      allow create: if request.auth != null &&
-                       request.resource.data.coachId == request.auth.uid &&
-                       'clientName' in request.resource.data &&
-                       'sessionDate' in request.resource.data &&
-                       request.resource.data.sessionDate is timestamp &&
-                       'sessionType' in request.resource.data &&
-                       'status' in request.resource.data;
-
-      // Allow read for admin, or for the coach who created it, or for the client it belongs to.
+      // A user with the 'coach' role can create sessions.
+      allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
+      
+      // The session can be read by:
+      // 1. The coach who created it.
+      // 2. The client for whom it was created.
+      // 3. Any admin.
       allow read: if request.auth != null &&
-                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-                      resource.data.coachId == request.auth.uid ||
-                      resource.data.clientId == request.auth.uid);
-
-      // Allow update for admin or the coach who created it.
+                     (resource.data.coachId == request.auth.uid ||
+                      resource.data.clientId == request.auth.uid ||
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+                      
+      // The session can be updated by:
+      // 1. The coach who created it.
+      // 2. Any admin.
       allow update: if request.auth != null &&
-                       (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-                        resource.data.coachId == request.auth.uid);
-
-      // Disallow delete for now.
-      allow delete: if false;
+                     (resource.data.coachId == request.auth.uid ||
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+                      
+      // Only an admin can delete sessions.
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }

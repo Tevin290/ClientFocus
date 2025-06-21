@@ -26,7 +26,7 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   photoURL?: string | null;
-  createdAt: Timestamp;
+  createdAt: Timestamp | FieldValue; // Allow for FieldValue on create
   coachId?: string;
   stripeCustomerId?: string;
 }
@@ -45,47 +45,21 @@ export interface NewSessionData {
   status: 'Logged' | 'Reviewed' | 'Billed';
 }
 
-// This function determines the role based on email address rules.
-function determineRole(email: string | null): UserRole {
-  const normalizedEmail = (email || '').toLowerCase();
-  const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || ['hello@hmperform.com']);
-
-  if (ADMIN_EMAILS.includes(normalizedEmail)) {
-    return 'admin';
-  }
-  if (normalizedEmail.endsWith('@hmperform.com')) {
-    return 'coach';
-  }
-  return 'client';
-}
-
-export async function createUserProfileInFirestore(firebaseUser: FirebaseUser): Promise<void> {
+// Note: createUserProfileInFirestore is no longer called by the signup page.
+// The logic has been inlined into `signup/page.tsx`.
+// This function is kept for potential future use or for server-side scripts like dummy data generation.
+export async function createUserProfileInFirestore(
+  uid: string,
+  profileData: Omit<UserProfile, 'uid' | 'createdAt'> & { createdAt?: FieldValue | Timestamp }
+): Promise<void> {
   ensureFirebaseIsOperational();
-
-  if (!firebaseUser || !firebaseUser.uid) {
-    const criticalError = "[firestoreService] Critical Error: firebaseUser object is null or has no UID. Aborting profile creation.";
-    console.error(criticalError);
-    throw new Error("Invalid user object provided for profile creation.");
-  }
-
-  const uid = firebaseUser.uid;
   const userDocRef = doc(db, 'users', uid);
-  const role = determineRole(firebaseUser.email);
-  
-  const dataForFirestore = {
-    uid: uid,
-    email: firebaseUser.email,
-    displayName: firebaseUser.displayName,
-    role: role,
-    createdAt: serverTimestamp(),
-    photoURL: firebaseUser.photoURL || null,
-  };
-
-  console.log(`Attempting to create user profile for UID: ${uid} with role: ${role}`);
-
   try {
-    await setDoc(userDocRef, dataForFirestore);
-    console.log(`User profile successfully created in Firestore for UID: ${uid}`);
+    await setDoc(userDocRef, { 
+      ...profileData, 
+      uid, 
+      createdAt: profileData.createdAt || serverTimestamp() 
+    });
   } catch (error) {
     console.error(`Error writing user profile to Firestore for UID ${uid}:`, error);
     throw error;
