@@ -29,7 +29,7 @@ import {
 import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
@@ -144,7 +144,7 @@ export default function SignupPage() {
         email: firebaseUser.email,
         displayName: data.displayName,
         role: role,
-        createdAt: serverTimestamp(),
+        createdAt: Timestamp.now(), // Use client-side timestamp for reliability
         photoURL: firebaseUser.photoURL || null,
       };
 
