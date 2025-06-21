@@ -1,81 +1,12 @@
-
-rules_version = '2';
-
+rules_version = '2'
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper function to determine role based on email address.
-    // This logic should mirror the `determineRole` function in the app code.
-    function getRole(email) {
-      // NOTE: Your NEXT_PUBLIC_ADMIN_EMAILS must be hardcoded here or stored
-      // in a readable Firestore document if you need them to be dynamic.
-      // For now, we use the default.
-      let adminEmails = ['hello@hmperform.com']; 
-      
-      if (email in adminEmails) {
-        return 'admin';
-      }
-      if (email.matches('.*@hmperform\\.com$')) {
-        return 'coach';
-      }
-      return 'client';
-    }
-    
+    // Allow new users to create THEIR OWN user document
     match /users/{userId} {
-      // ANYONE can create their own user profile document IF:
-      // 1. They are authenticated.
-      // 2. They are creating a document for their OWN UID.
-      // 3. The `uid` in the document matches their auth UID.
-      // 4. The `email` in the document matches their auth email.
-      // 5. The `displayName` is a non-empty string.
-      // 6. The `role` being assigned matches the business logic in the getRole function.
-      // 7. The `createdAt` timestamp matches the server time of the request.
-      allow create: if request.auth != null && 
-                       request.auth.uid == userId &&
-                       request.resource.data.uid == request.auth.uid &&
-                       request.resource.data.email == request.auth.token.email &&
-                       request.resource.data.displayName is string &&
-                       request.resource.data.displayName.size() > 2 &&
-                       request.resource.data.role == getRole(request.auth.token.email) &&
-                       request.resource.data.createdAt == request.time;
-      
-      // A user can read their OWN profile.
-      // An admin can read ANY user profile.
-      allow read: if request.auth != null && 
-                     (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-
-      // A user can update their OWN profile, but cannot change their role.
-      // An admin can update ANY user profile, including the role.
-      allow update: if request.auth != null &&
-                       ((request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
-                       (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
-      
-      // Only an admin can delete user profiles.
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    match /sessions/{sessionId} {
-      // A user with the 'coach' role can create sessions.
-      allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
-      
-      // The session can be read by:
-      // 1. The coach who created it.
-      // 2. The client for whom it was created.
-      // 3. Any admin.
-      allow read: if request.auth != null &&
-                     (resource.data.coachId == request.auth.uid ||
-                      resource.data.clientId == request.auth.uid ||
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-                      
-      // The session can be updated by:
-      // 1. The coach who created it.
-      // 2. Any admin.
-      allow update: if request.auth != null &&
-                     (resource.data.coachId == request.auth.uid ||
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-                      
-      // Only an admin can delete sessions.
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create: if request.auth != null 
+                    && request.auth.uid == userId;
+      allow read, update: if request.auth != null 
+                    && request.auth.uid == userId;
     }
   }
 }
