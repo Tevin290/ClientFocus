@@ -56,7 +56,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
             setUserProfile(profile);
             setRoleState(profile.role);
           } else {
-            // This case is normal during the signup process before the profile is created.
+            console.warn(`[RoleContext] User ${firebaseUser.uid} is authenticated but has no profile in Firestore.`);
             setUserProfile(null);
             setRoleState(null);
           }
@@ -73,37 +73,41 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
     });
     return () => unsubscribe();
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
   // Effect to handle redirection logic based on auth state
   React.useEffect(() => {
+    // Wait until the initial auth state check is complete
     if (isLoading) {
-      return; // Do nothing while auth state is being determined
+      return;
     }
 
     const isAuthPage = pathname === '/login' || pathname === '/signup';
-    const isSuccessPage = pathname.startsWith('/coach/log-session/success');
-
+    
+    // Case 1: User is authenticated and has a role
     if (user && role) {
-      // User is logged in with a role
       if (isAuthPage) {
-        console.log(`[RoleContext] User logged in, redirecting from auth page to /${role}/dashboard.`);
-        router.push(`/${role}/dashboard`);
+        console.log(`[RoleContext] User is on auth page. Redirecting to /${role}/dashboard...`);
+        router.replace(`/${role}/dashboard`);
       }
-    } else {
-      // User is not logged in or has no role
-      if (!isAuthPage && !isSuccessPage) {
-        console.log(`[RoleContext] User not logged in, redirecting to /login from protected page.`);
-        router.push('/login');
+      // If user is on another page, they are allowed to be there. Do nothing.
+    } 
+    // Case 2: User is not authenticated (or has no role)
+    else {
+      const isProtectedRoute = !isAuthPage && !pathname.startsWith('/coach/log-session/success');
+      if (isProtectedRoute) {
+        console.log(`[RoleContext] User not authenticated, redirecting to /login from protected page.`);
+        router.replace('/login');
       }
+      // If user is on an auth page, they are allowed to be there. Do nothing.
     }
-  }, [user, role, isLoading, pathname, router]);
+  }, [isLoading, user, role, pathname, router]);
 
 
   const logout = async () => {
     setIsLoading(true);
     await auth.signOut();
-    // onAuthStateChanged will handle clearing state and the effect above will handle redirection.
+    // onAuthStateChanged will handle clearing state and the redirection effect will handle routing to /login.
   };
 
   return (
