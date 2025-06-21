@@ -4,63 +4,90 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper functions to make rules reusable and readable
+    // =================================
+    // Helper Functions
+    // =================================
     function isAuth() {
       return request.auth != null;
     }
-    
+
     function isUser(userId) {
       return isAuth() && request.auth.uid == userId;
     }
-    
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
     function getRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+      return getUserData(userId).role;
     }
 
     function isAdmin() {
       return isAuth() && getRole(request.auth.uid) == 'admin';
     }
 
-    // Admins have "god mode" - full read, write, and delete access to everything.
+    function isCoach() {
+      return isAuth() && getRole(request.auth.uid) == 'coach';
+    }
+
+    function isClient() {
+      return isAuth() && getRole(request.auth.uid) == 'client';
+    }
+
+    // =================================
+    // Global Admin Access
+    // =================================
+    // Admins can read, write, and delete anything. This rule is checked first.
     match /{document=**} {
-      allow read, write, delete: if isAdmin();
+      allow read, write: if isAdmin();
     }
-    
-    // Rules for the 'users' collection
+
+    // =================================
+    // User Profiles (/users)
+    // =================================
     match /users/{userId} {
-      // Allow a user to read their own profile.
-      // Allow a coach to read the profile of a client assigned to them.
-      allow read: if isUser(userId) || (isAuth() && getRole(request.auth.uid) == 'coach' && resource.data.coachId == request.auth.uid);
+      // READ permissions:
+      // - A user can read their own profile.
+      // - Anyone can read a coach's profile (for signup).
+      // - A coach can read the profile of a client assigned to them.
+      allow get: if isUser(userId) 
+                  || resource.data.role == 'coach' 
+                  || (isCoach() && resource.data.coachId == request.auth.uid);
+      
+      // LIST (Query) permissions:
+      // - Anyone can LIST users if they are querying for coaches (for signup).
+      // - A coach can LIST users if they are querying for their clients.
+      allow list: if request.query.role == 'coach'
+                   || (isCoach() && request.query.coachId == request.auth.uid);
 
-      // Anyone can create a user document (required for public signup).
-      allow create: if true;
+      // CREATE permissions: A user can create their own profile.
+      allow create: if isUser(userId);
 
-      // A user can update their own profile, but they cannot change their role.
-      allow update: if isUser(userId) && request.resource.data.role == resource.data.role;
-
-      // Deleting users is handled by the global admin rule.
+      // UPDATE permissions:
+      // - A client can update their own coachId.
+      allow update: if isUser(userId) 
+                     && request.resource.data.keys().hasAll(['coachId']);
     }
 
-    // Rules for the 'sessions' collection
+    // =================================
+    // Sessions (/sessions)
+    // =================================
     match /sessions/{sessionId} {
-      // A client can read their own sessions.
-      // A coach can read sessions belonging to their assigned clients.
-      allow read: if isAuth() && (
-        request.auth.uid == resource.data.clientId || 
-        (getRole(request.auth.uid) == 'coach' && get(/databases/$(database)/documents/users/$(resource.data.clientId)).data.coachId == request.auth.uid)
-      );
-
-      // A coach can create a session for one of their assigned clients.
-      // The session data must correctly list the coach creating it.
-      allow create: if isAuth() && 
-                      getRole(request.auth.uid) == 'coach' && 
-                      request.resource.data.coachId == request.auth.uid &&
-                      get(/databases/$(database)/documents/users/$(request.resource.data.clientId)).data.coachId == request.auth.uid;
-      
-      // A coach can update a session they created.
-      allow update: if isAuth() && request.auth.uid == resource.data.coachId;
-
-      // Deleting sessions is handled by the global admin rule.
+      // READ permissions:
+      // - A coach can read sessions they created.
+      // - A client can read their own sessions.
+      allow read: if (isCoach() && resource.data.coachId == request.auth.uid) 
+                   || (isClient() && resource.data.clientId == request.auth.uid);
+        
+      // CREATE permissions: A coach can create a session for one of their assigned clients.
+      allow create: if isCoach() 
+                     && request.resource.data.coachId == request.auth.uid
+                     && getUserData(request.resource.data.clientId).coachId == request.auth.uid;
+                     
+      // UPDATE permissions: An admin can update any session (covered by global rule).
+      // A coach could update a session, but that is handled by the admin review flow.
+      allow update: if isAuth() && getRole(request.auth.uid) == 'admin';
     }
   }
 }
