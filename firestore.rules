@@ -1,56 +1,89 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper function to check the requesting user's role.
-    // It reads the user's own document to find their role.
-    function getRequestingUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-    
-    // Helper function to check if the user is an admin.
-    function isRequestingUserAdmin() {
-      return request.auth != null && getRequestingUserRole() == 'admin';
+
+    // Helper Functions
+    function isAuth() {
+      return request.auth != null;
     }
 
-    // Rules for the 'users' collection
+    function isSelf(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    function getUserRole(uid) {
+      // Use exists() to prevent errors on new user creation before their doc is written.
+      return exists(/databases/$(database)/documents/users/$(uid))
+        ? get(/databases/$(database)/documents/users/$(uid)).data.role
+        : '';
+    }
+
+    function isAdmin() {
+      return isAuth() && getUserRole(request.auth.uid) == 'admin';
+    }
+    
+    function isCoach() {
+      return isAuth() && getUserRole(request.auth.uid) == 'coach';
+    }
+
+    function isCoachOwner(sessionData) {
+      return isAuth() && sessionData.coachId == request.auth.uid;
+    }
+    
+    function isClientOwner(sessionData) {
+      return isAuth() && sessionData.clientId == request.auth.uid;
+    }
+
+    // This function checks that the role being assigned in a new user document
+    // is consistent with that user's email address. This prevents a user from
+    // creating an account with a non-company email and assigning themselves 'coach'.
+    function isValidRoleAssignment(userData) {
+      let email = userData.email.toLowerCase();
+      let isCompanyEmail = email.matches('.*@hmperform\\.com$');
+      
+      // Use a fixed list for admin emails for security.
+      // To add more, you would add them to this list.
+      let adminEmails = ['hello@hmperform.com'];
+      let isAdminByEmail = email in adminEmails;
+      
+      return (userData.role == 'admin' && isAdminByEmail) ||
+             (userData.role == 'coach' && isCompanyEmail && !isAdminByEmail) ||
+             (userData.role == 'client' && !isCompanyEmail);
+    }
+    
+    // USERS collection rules
     match /users/{userId} {
-      // Admins can list and read any user.
-      // A user can read their own document.
-      allow read: if isRequestingUserAdmin() || request.auth.uid == userId;
-      allow list: if isRequestingUserAdmin();
+      // Allow creation if a user is creating their own doc with a valid role, OR if the request is from an admin.
+      allow create: if (isSelf(userId) && isValidRoleAssignment(request.resource.data)) || isAdmin();
+
+      // Allow read if a user is reading their own doc, OR if the request is from an admin.
+      allow read: if isSelf(userId) || isAdmin();
       
-      // A user can update their own document.
-      // Admins can also update any user document.
-      allow update: if isRequestingUserAdmin() || request.auth.uid == userId;
+      // Only admins can list all users.
+      allow list: if isAdmin();
 
+      // Allow update if a user is updating their own doc (but not their role), OR if the request is from an admin.
+      allow update: if (isSelf(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      
       // Only admins can delete users.
-      allow delete: if isRequestingUserAdmin();
-
-      // Anyone authenticated can create their OWN user document.
-      // The role assignment logic is handled in the signup form and enforced by the rules.
-      allow create: if request.auth != null && request.auth.uid == userId;
+      allow delete: if isAdmin();
     }
 
-    // Rules for the 'sessions' collection
+    // SESSIONS collection rules
     match /sessions/{sessionId} {
-      // An admin, the session's coach, or the session's client can read a session.
-      allow read: if isRequestingUserAdmin() || request.auth.uid == resource.data.coachId || request.auth.uid == resource.data.clientId;
+      // Allow creation if the user is a coach and owns the session, OR if the request is from an admin.
+      allow create: if (isCoach() && isCoachOwner(request.resource.data)) || isAdmin();
       
-      // An authenticated user can query the sessions collection.
-      // The 'read' rule above will ensure they only get documents they are allowed to see.
-      allow list: if request.auth != null; 
-
-      // Only the coach of a session can create it.
-      // We check that the creating user's UID matches the coachId in the new document.
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.coachId;
-
-      // Only an admin or the session's coach can update it.
-      allow update: if isRequestingUserAdmin() || request.auth.uid == resource.data.coachId;
-
-      // Only an admin can delete a session.
-      allow delete: if isRequestingUserAdmin();
+      // Allow read if the user owns the session (as coach or client), OR if the request is from an admin.
+      allow read: if isCoachOwner(resource.data) || isClientOwner(resource.data) || isAdmin();
+      
+      // Allow update if the user is the coach owner, OR if the request is from an admin.
+      allow update: if isCoachOwner(resource.data) || isAdmin();
+      
+      // Only admins can delete sessions.
+      allow delete: if isAdmin();
     }
   }
 }
