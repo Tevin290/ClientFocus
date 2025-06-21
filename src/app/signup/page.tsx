@@ -26,30 +26,20 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, ChevronsRight } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
-
-const signupFormSchema = z
-  .object({
-    displayName: z.string().min(3, { message: 'Full name must be at least 3 characters.' }),
-    email: z.string().email({ message: 'Please enter a valid email address.' }),
-    password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
-    confirmPassword: z.string().min(6, { message: 'Please confirm your password.' }),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match.",
-    path: ['confirmPassword'],
-  });
-
-type SignupFormValues = z.infer<typeof signupFormSchema>;
+import { getAllCoaches, type UserProfile as CoachProfile } from '@/lib/firestoreService';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // This function determines the role based on email address rules.
-// It is now a local helper function for the signup page.
 const determineRole = (email: string | null): UserRole => {
   const normalizedEmail = (email || '').toLowerCase();
   const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || ['hello@hmperform.com']);
@@ -63,6 +53,32 @@ const determineRole = (email: string | null): UserRole => {
   return 'client';
 };
 
+const signupFormSchema = z
+  .object({
+    displayName: z.string().min(3, { message: 'Full name must be at least 3 characters.' }),
+    email: z.string().email({ message: 'Please enter a valid email address.' }),
+    password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+    confirmPassword: z.string().min(6, { message: 'Please confirm your password.' }),
+    coachId: z.string().optional(),
+    coachName: z.string().optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match.",
+    path: ['confirmPassword'],
+  })
+  .refine((data) => {
+    // If the determined role is client, then a coach must be selected.
+    if (determineRole(data.email) === 'client') {
+      return !!data.coachId;
+    }
+    return true;
+  }, {
+    message: "Please select your coach to complete signup.",
+    path: ["coachId"],
+  });
+
+
+type SignupFormValues = z.infer<typeof signupFormSchema>;
 
 export default function SignupPage() {
   const router = useRouter();
@@ -71,6 +87,11 @@ export default function SignupPage() {
   const [firebaseNotConfigured, setFirebaseNotConfigured] = React.useState(false);
   const [autoAssignedRole, setAutoAssignedRole] = React.useState<UserRole | null>(null);
 
+  const [coaches, setCoaches] = React.useState<CoachProfile[]>([]);
+  const [isLoadingCoaches, setIsLoadingCoaches] = React.useState(true);
+  const [isCoachSelectorOpen, setIsCoachSelectorOpen] = React.useState(false);
+
+
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupFormSchema),
     defaultValues: {
@@ -78,8 +99,10 @@ export default function SignupPage() {
       email: '',
       password: '',
       confirmPassword: '',
+      coachId: '',
+      coachName: '',
     },
-    mode: 'onChange', 
+    mode: 'onChange',
   });
 
   const emailValue = form.watch('email');
@@ -97,6 +120,23 @@ export default function SignupPage() {
   }, [toast]);
 
   React.useEffect(() => {
+    const fetchCoaches = async () => {
+      if (!isFirebaseConfigured()) return;
+      setIsLoadingCoaches(true);
+      try {
+        const fetchedCoaches = await getAllCoaches();
+        setCoaches(fetchedCoaches);
+      } catch (error) {
+        console.error("Failed to fetch coaches:", error);
+        toast({ title: "Could not load coaches", description: "There was an error fetching the list of available coaches.", variant: "destructive" });
+      } finally {
+        setIsLoadingCoaches(false);
+      }
+    };
+    fetchCoaches();
+  }, [toast]);
+
+  React.useEffect(() => {
     if (emailValue && z.string().email().safeParse(emailValue).success) {
       const role = determineRole(emailValue);
       setAutoAssignedRole(role);
@@ -104,6 +144,13 @@ export default function SignupPage() {
       setAutoAssignedRole(null);
     }
   }, [emailValue]);
+
+  const handleSelectCoach = (coach: CoachProfile) => {
+    form.setValue('coachId', coach.uid, { shouldValidate: true });
+    form.setValue('coachName', coach.displayName, { shouldValidate: true });
+    setIsCoachSelectorOpen(false);
+  };
+
 
   const getRoleIcon = (role: UserRole | null) => {
     if (!role) return <Mail className="h-4 w-4 text-muted-foreground" />;
@@ -127,23 +174,26 @@ export default function SignupPage() {
       // 1. Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
-      
+
       // 2. Update the user's display name in their Auth profile
       await updateProfile(firebaseUser, { displayName: data.displayName });
-      
+
       // 3. Create the user's profile document in Firestore
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const role = determineRole(firebaseUser.email);
-      
-      // This data object is carefully constructed to pass the new, stricter security rules.
-      const userProfileData = {
+
+      const userProfileData: any = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: data.displayName,
         role: role,
-        createdAt: Timestamp.now(), // Use client-side timestamp for reliability
+        createdAt: Timestamp.now(),
         photoURL: firebaseUser.photoURL || null,
       };
+
+      if (role === 'client' && data.coachId) {
+        userProfileData.coachId = data.coachId;
+      }
 
       await setDoc(userDocRef, userProfileData);
 
@@ -158,23 +208,23 @@ export default function SignupPage() {
       if (error instanceof RangeError) {
         toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
       } else if (error.code) {
-          switch (error.code) {
-              case 'auth/email-already-in-use':
-                  toastMessage = 'This email address is already in use.';
-                  break;
-              case 'auth/weak-password':
-                  toastMessage = 'The password is too weak.';
-                  break;
-              case 'permission-denied':
-                   toastMessage = "Signup failed due to permissions. Please check your Firestore rules and contact support.";
-                   break;
-              default:
-                   toastMessage = `An error occurred: ${error.code}. Please try again.`;
-          }
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            toastMessage = 'This email address is already in use.';
+            break;
+          case 'auth/weak-password':
+            toastMessage = 'The password is too weak.';
+            break;
+          case 'permission-denied':
+            toastMessage = "Signup failed due to permissions. Please check your Firestore rules and contact support.";
+            break;
+          default:
+            toastMessage = `An error occurred: ${error.code}. Please try again.`;
+        }
       } else if (error.message) {
         toastMessage = error.message;
       }
-      
+
       toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
@@ -186,9 +236,9 @@ export default function SignupPage() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-background via-muted/30 to-background p-6 selection:bg-primary/20">
       <Card className="w-full max-w-lg shadow-xl rounded-xl border-border/50 overflow-hidden">
         <CardHeader className="bg-card p-8 text-center">
-            <Link href="/" className="inline-block mb-6 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-card rounded-md">
-                <Building className="h-12 w-12 text-primary transition-transform duration-300 ease-in-out hover:scale-110" />
-            </Link>
+          <Link href="/" className="inline-block mb-6 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-card rounded-md">
+            <Building className="h-12 w-12 text-primary transition-transform duration-300 ease-in-out hover:scale-110" />
+          </Link>
           <CardTitle className="text-3xl font-headline font-bold text-foreground tracking-tight">
             Create Your SessionSync Account
           </CardTitle>
@@ -240,7 +290,7 @@ export default function SignupPage() {
                         className="bg-background/80 border-input focus:border-primary h-11 text-base"
                       />
                     </FormControl>
-                     {autoAssignedRole && (
+                    {autoAssignedRole && (
                       <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5 pl-1">
                         {getRoleIcon(autoAssignedRole)}
                         Anticipated role: <span className="font-semibold capitalize">{autoAssignedRole}</span>
@@ -290,6 +340,66 @@ export default function SignupPage() {
                   )}
                 />
               </div>
+
+              {autoAssignedRole === 'client' && (
+                <FormField
+                  control={form.control}
+                  name="coachId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Your Coach</FormLabel>
+                      <FormControl>
+                        <Dialog open={isCoachSelectorOpen} onOpenChange={setIsCoachSelectorOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal h-11 text-base">
+                              {form.getValues('coachName') || "Select your coach..."}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[625px]">
+                            <DialogHeader>
+                              <DialogTitle>Select Your Coach</DialogTitle>
+                              <DialogDescription>
+                                Choose the coach you will be working with from the list below.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <ScrollArea className="h-[400px] pr-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {isLoadingCoaches ? (
+                                  Array.from({ length: 4 }).map((_, i) => (
+                                    <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
+                                      <Skeleton className="h-12 w-12 rounded-full" />
+                                      <div className="space-y-2">
+                                        <Skeleton className="h-4 w-[150px]" />
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : coaches.length > 0 ? (
+                                  coaches.map(coach => (
+                                    <button key={coach.uid} type="button" onClick={() => handleSelectCoach(coach)} className="block w-full text-left p-4 border rounded-lg hover:bg-accent focus:bg-accent focus:outline-none focus:ring-2 focus:ring-ring transition-colors">
+                                      <div className="flex items-center space-x-4">
+                                        <Avatar className="h-12 w-12">
+                                          <AvatarImage src={coach.photoURL || undefined} alt={coach.displayName} />
+                                          <AvatarFallback>{coach.displayName.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="font-medium">{coach.displayName}</div>
+                                      </div>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <p className="text-muted-foreground col-span-2 text-center py-8">No coaches are available at this time.</p>
+                                )}
+                              </div>
+                            </ScrollArea>
+                          </DialogContent>
+                        </Dialog>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+
             </CardContent>
             <CardFooter className="flex flex-col items-center p-8 pt-2 bg-card">
               <Button
@@ -310,7 +420,7 @@ export default function SignupPage() {
                   href="/login"
                   className="font-medium text-primary hover:underline hover:text-primary/90 flex items-center gap-1 focus:outline-none focus:ring-1 focus:ring-primary focus:rounded-sm"
                 >
-                   <LogIn className="h-4 w-4"/> Log In
+                  <LogIn className="h-4 w-4" /> Log In
                 </Link>
               </p>
             </CardFooter>
@@ -318,10 +428,12 @@ export default function SignupPage() {
         </Form>
       </Card>
       {firebaseNotConfigured && (
-         <p className="mt-4 text-xs text-destructive text-center max-w-md">
-            Critical: Firebase is not configured. Sign up functionality is disabled. Please check your <code>src/lib/firebase.ts</code> file or environment variables.
+        <p className="mt-4 text-xs text-destructive text-center max-w-md">
+          Critical: Firebase is not configured. Sign up functionality is disabled. Please check your <code>src/lib/firebase.ts</code> file or environment variables.
         </p>
       )}
     </div>
   );
 }
+
+    
