@@ -1,6 +1,4 @@
 
-'use server';
-
 import { writeBatch, Timestamp, collection, doc, serverTimestamp } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 import { createUserProfileInFirestore, type UserProfile } from './firestoreService';
