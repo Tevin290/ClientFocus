@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -13,10 +13,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
-import { Bot, Save, Loader2 } from 'lucide-react';
+import { Bot, Save, Loader2, TriangleAlert } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { logSession, type NewSessionData } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 const sessionLogSchema = z.object({
   clientId: z.string().min(1, 'Client ID is required (usually auto-filled or selected)').optional(), // Will make required if not auto-filled
@@ -41,10 +42,23 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [firebaseAvailable, setFirebaseAvailable] = useState(isFirebaseConfigured());
+  const [firebaseAvailable, setFirebaseAvailable] = useState(true);
 
   const prefilledClientId = searchParams.get('clientId');
   const prefilledClientName = searchParams.get('clientName');
+
+  useEffect(() => {
+    const isConfigured = isFirebaseConfigured();
+    setFirebaseAvailable(isConfigured);
+    if (!isConfigured) {
+      toast({
+        title: "Firebase Not Configured",
+        description: "Logging sessions is disabled. Please contact an administrator.",
+        variant: "destructive",
+        duration: 8000
+      });
+    }
+  }, [toast]);
 
 
   const form = useForm<SessionLogFormValues>({
@@ -89,6 +103,15 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
     } finally {
       setIsSummarizing(false);
     }
+  };
+
+  const onInvalid = (errors: any) => {
+    console.error('[SessionLogForm] Form validation failed:', errors);
+    toast({
+      title: 'Invalid Form Data',
+      description: 'Please check the form for errors and try again.',
+      variant: 'destructive',
+    });
   };
 
   const onSubmit: SubmitHandler<SessionLogFormValues> = async (data) => {
@@ -138,8 +161,17 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
         <CardDescription>Fill in the details for your recent coaching session. Logged by: {coachName}</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
           <CardContent className="space-y-6">
+             {!firebaseAvailable && (
+              <Alert variant="destructive">
+                <TriangleAlert className="h-4 w-4" />
+                <AlertTitle>Firebase Not Configured</AlertTitle>
+                <AlertDescription>
+                  Session logging is currently disabled. Please contact an administrator to configure the Firebase connection.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -147,7 +179,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client Full Name</FormLabel>
-                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} readOnly={!!prefilledClientName} /></FormControl>
+                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} readOnly={!!prefilledClientName} disabled={!firebaseAvailable} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -158,7 +190,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client Email</FormLabel>
-                    <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} /></FormControl>
+                    <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} disabled={!firebaseAvailable} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -171,7 +203,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Session Date</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormControl><Input type="date" {...field} disabled={!firebaseAvailable} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -183,7 +215,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Session Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!firebaseAvailable}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select session type" />
@@ -205,7 +237,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Session Video Link (Optional)</FormLabel>
-                  <FormControl><Input placeholder="https://example.com/session-recording" {...field} /></FormControl>
+                  <FormControl><Input placeholder="https://example.com/session-recording" {...field} disabled={!firebaseAvailable} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -217,7 +249,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Session Notes</FormLabel>
-                  <FormControl><Textarea placeholder="Key discussion points, actions, client progress..." {...field} rows={6} /></FormControl>
+                  <FormControl><Textarea placeholder="Key discussion points, actions, client progress..." {...field} rows={6} disabled={!firebaseAvailable} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -236,7 +268,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
                 </Button>
               </div>
               <FormControl>
-                <Textarea id="summary" placeholder="Summary will appear here after generation..." {...form.register('summary')} readOnly={isSummarizing} rows={4} className="bg-muted/50" />
+                <Textarea id="summary" placeholder="Summary will appear here after generation..." {...form.register('summary')} readOnly={isSummarizing} rows={4} className="bg-muted/50" disabled={!firebaseAvailable}/>
               </FormControl>
               <FormMessage>{form.formState.errors.summary?.message}</FormMessage>
             </div>
