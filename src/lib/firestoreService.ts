@@ -236,3 +236,37 @@ export async function getAllSessionsForAdmin(): Promise<Session[]> {
     throw new Error(`Failed to fetch all sessions for admin. See server logs for details.`);
   }
 }
+
+export async function getAllCoaches(): Promise<UserProfile[]> {
+  ensureFirebaseIsOperational();
+  try {
+    const usersCol = collection(db, 'users');
+    const q = query(usersCol, where('role', '==', 'coach'), orderBy('displayName', 'asc'));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return [];
+    }
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      let createdAtTimestamp: Timestamp;
+      if (data.createdAt instanceof Timestamp) {
+        createdAtTimestamp = data.createdAt;
+      } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+        createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+      } else {
+        createdAtTimestamp = Timestamp.now();
+      }
+      return {
+        uid: data.uid,
+        email: data.email,
+        displayName: data.displayName,
+        role: 'coach',
+        photoURL: data.photoURL || null,
+        createdAt: createdAtTimestamp,
+      } as UserProfile;
+    });
+  } catch (error: any) {
+    console.error(`Detailed Firebase Error in getAllCoaches:`, error);
+    throw new Error(`Failed to fetch coaches. See server logs for details.`);
+  }
+}

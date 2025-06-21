@@ -1,190 +1,115 @@
 
+'use server';
+
 import { writeBatch, Timestamp, collection, doc, serverTimestamp } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
-import { createUserProfileInFirestore, type UserProfile } from './firestoreService';
-import type { NewSessionData } from './firestoreService';
+import { db } from './firebase';
+import type { UserProfile } from './firestoreService';
 
-// Helper function to ensure Firebase is configured and db is available
-function ensureFirebaseIsOperationalForDummyData() {
-  if (!isFirebaseConfigured()) {
-    const errorMessage = "Firebase is not configured. Please add your Firebase config to src/lib/firebase.ts or environment variables.";
-    console.error(errorMessage + " Cannot generate dummy data.");
-    throw new Error(errorMessage);
-  }
+/**
+ * Generates dummy data for a specific, existing coach.
+ * This function creates new dummy CLIENTS and assigns them to the coach,
+ * then creates dummy SESSIONS for those new clients.
+ * This is a server-side action.
+ * @param coach An object containing the coach's uid and displayName.
+ * @returns A promise that resolves with the number of clients and sessions created.
+ */
+export async function generateDummyDataForCoach(coach: { coachId: string; coachName: string }): Promise<{ clientsCreated: number, sessionsCreated: number }> {
   if (!db) {
-    const dbErrorMessage = "Firestore DB is not initialized. This can happen if Firebase configuration is missing or incorrect. Cannot generate dummy data.";
-    console.error(dbErrorMessage);
-    throw new Error(dbErrorMessage);
+    throw new Error("Firestore DB is not initialized. This can happen if Firebase configuration is missing or incorrect.");
   }
-}
-
-const DUMMY_UIDS = {
-  admin: 'dummy-admin-uid',
-  coach1: 'dummy-coach1-uid',
-  coach2: 'dummy-coach2-uid',
-  client1: 'dummy-client1-uid',
-  client2: 'dummy-client2-uid',
-  client3: 'dummy-client3-uid',
-};
-
-export async function generateDummyData(): Promise<{ usersCreated: number, sessionsCreated: number }> {
-  ensureFirebaseIsOperationalForDummyData(); // Check Firebase config first
 
   const batch = writeBatch(db);
-  let usersCreated = 0;
+  let clientsCreated = 0;
   let sessionsCreated = 0;
 
-  const usersToCreate: Array<Omit<UserProfile, 'createdAt' | 'uid'> & { uid: string, email: string }> = [
+  const usersCollectionRef = collection(db, 'users');
+
+  // 1. Create a few dummy clients for this coach
+  const dummyClients = [
     {
-      uid: DUMMY_UIDS.admin,
-      email: 'admin@example.com',
-      displayName: 'Admin User',
-      role: 'admin',
-      photoURL: 'https://placehold.co/100x100.png?text=AU',
+      displayName: 'Danny Devito',
+      email: `danny.devito.${Date.now()}@example.com`,
+      photoURL: 'https://placehold.co/100x100.png?text=DD',
     },
     {
-      uid: DUMMY_UIDS.coach1,
-      email: 'coach@example.com',
-      displayName: 'Coach Taylor',
-      role: 'coach',
-      photoURL: 'https://placehold.co/100x100.png?text=CT',
-    },
-    {
-      uid: DUMMY_UIDS.coach2,
-      email: 'coach.carter@example.com',
-      displayName: 'Coach Carter',
-      role: 'coach',
-      photoURL: 'https://placehold.co/100x100.png?text=CC',
-    },
-    {
-      uid: DUMMY_UIDS.client1,
-      email: 'client@example.com',
-      displayName: 'Alice Wonderland',
-      role: 'client',
-      coachId: DUMMY_UIDS.coach1,
-      photoURL: 'https://placehold.co/100x100.png?text=AW',
-    },
-    {
-      uid: DUMMY_UIDS.client2,
-      email: 'bob.builder@example.com',
-      displayName: 'Bob Builder',
-      role: 'client',
-      coachId: DUMMY_UIDS.coach1,
-      photoURL: 'https://placehold.co/100x100.png?text=BB',
-    },
-    {
-      uid: DUMMY_UIDS.client3,
-      email: 'charlie.brown@example.com',
-      displayName: 'Charlie Brown',
-      role: 'client',
-      coachId: DUMMY_UIDS.coach2,
-      photoURL: 'https://placehold.co/100x100.png?text=CB',
+      displayName: 'Frank Reynolds',
+      email: `frank.reynolds.${Date.now()}@example.com`,
+      photoURL: 'https://placehold.co/100x100.png?text=FR',
     },
   ];
 
-  for (const userData of usersToCreate) {
-    const { uid, ...profileData } = userData;
-    // createUserProfileInFirestore will do its own check, but this loop is part of the "generateDummyData" operation.
-    // If it fails, the whole dummy data generation should ideally fail or report it.
-    try {
-      await createUserProfileInFirestore(uid, { ...profileData, createdAt: Timestamp.now() });
-      usersCreated++;
-    } catch (error) {
-       console.error(`Failed to create dummy user ${uid}:`, error);
-       // Decide if one user failing should stop the whole batch or just be logged
-       // For now, rethrow to indicate the overall operation might be incomplete.
-       if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-          throw error;
-       }
-       throw new Error(`Failed during dummy user creation for ${uid}. Batch might be incomplete.`);
-    }
+  const createdClients: Array<{ id: string; name: string; email: string }> = [];
+
+  for (const client of dummyClients) {
+    const newClientRef = doc(usersCollectionRef); // Auto-generate ID
+    const newClientProfile: Omit<UserProfile, 'createdAt'> & { createdAt: any } = {
+      uid: newClientRef.id,
+      email: client.email,
+      displayName: client.displayName,
+      role: 'client',
+      photoURL: client.photoURL,
+      createdAt: serverTimestamp(),
+      coachId: coach.coachId, // Assign to the selected coach
+    };
+    batch.set(newClientRef, newClientProfile);
+    clientsCreated++;
+    createdClients.push({ id: newClientRef.id, name: client.displayName, email: client.email });
   }
 
-  const sessionsToCreate: NewSessionData[] = [
+  // 2. Create a few dummy sessions for these new clients
+  const sessionsCollectionRef = collection(db, 'sessions');
+  const sessionTemplates = [
     {
-      coachId: DUMMY_UIDS.coach1,
-      coachName: 'Coach Taylor',
-      clientId: DUMMY_UIDS.client1,
-      clientName: 'Alice Wonderland',
-      clientEmail: 'client@example.com',
-      sessionDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      clientIndex: 0,
+      daysAgo: 10,
       sessionType: 'Full',
-      sessionNotes: 'Initial goal setting session. Discussed long-term aspirations and short-term objectives. Alice is very motivated.',
-      summary: 'Goal setting and motivation assessment.',
-      status: 'Logged',
-      videoLink: 'https://example.com/dummy_video_1',
-    },
-    {
-      coachId: DUMMY_UIDS.coach1,
-      coachName: 'Coach Taylor',
-      clientId: DUMMY_UIDS.client1,
-      clientName: 'Alice Wonderland',
-      clientEmail: 'client@example.com',
-      sessionDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      sessionType: 'Half',
-      sessionNotes: 'Follow-up on action items from last week. Good progress on task A, need more focus on task B. Brainstormed solutions.',
-      summary: 'Action item review and problem-solving.',
-      status: 'Reviewed',
-    },
-    {
-      coachId: DUMMY_UIDS.coach1,
-      coachName: 'Coach Taylor',
-      clientId: DUMMY_UIDS.client2,
-      clientName: 'Bob Builder',
-      clientEmail: 'bob.builder@example.com',
-      sessionDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-      sessionType: 'Full',
-      sessionNotes: 'Discussed project management techniques and tool adoption. Bob is exploring new software for his team.',
-      summary: 'Project management strategies.',
-      status: 'Logged',
-    },
-    {
-      coachId: DUMMY_UIDS.coach2,
-      coachName: 'Coach Carter',
-      clientId: DUMMY_UIDS.client3,
-      clientName: 'Charlie Brown',
-      clientEmail: 'charlie.brown@example.com',
-      sessionDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-      sessionType: 'Full',
-      sessionNotes: 'Working on confidence building and communication skills. Role-played a few scenarios. Charlie showed improvement.',
-      summary: 'Confidence and communication practice.',
+      notes: 'Initial session focused on leadership development. We established key goals for the next quarter.',
+      summary: 'Leadership goal setting.',
       status: 'Billed',
     },
-     {
-      coachId: DUMMY_UIDS.coach2,
-      coachName: 'Coach Carter',
-      clientId: DUMMY_UIDS.client3,
-      clientName: 'Charlie Brown',
-      clientEmail: 'charlie.brown@example.com',
-      sessionDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      sessionType: 'Full',
-      sessionNotes: 'Reviewed weekly progress and addressed some minor setbacks with positive reframing.',
-      summary: 'Progress review and setback management.',
+    {
+      clientIndex: 0,
+      daysAgo: 3,
+      sessionType: 'Half',
+      notes: 'Quick follow-up on action items. Good progress made, but we identified a roadblock with team alignment.',
+      summary: 'Action item review.',
       status: 'Logged',
     },
-  ];
+    {
+      clientIndex: 1,
+      daysAgo: 8,
+      sessionType: 'Full',
+      notes: 'Session on improving communication strategies. We role-played some difficult conversations.',
+      summary: 'Communication strategy practice.',
+      status: 'Reviewed',
+    },
+  ] as const;
 
-  const sessionsCollectionRef = collection(db, 'sessions');
-  for (const sessionData of sessionsToCreate) {
+  for (const template of sessionTemplates) {
+    const clientUser = createdClients[template.clientIndex];
     const newSessionRef = doc(sessionsCollectionRef);
-    batch.set(newSessionRef, { 
-      ...sessionData, 
-      sessionDate: Timestamp.fromDate(sessionData.sessionDate),
+    
+    const sessionData = {
+      coachId: coach.coachId,
+      coachName: coach.coachName,
+      clientId: clientUser.id,
+      clientName: clientUser.name,
+      clientEmail: clientUser.email,
+      sessionDate: Timestamp.fromDate(new Date(Date.now() - template.daysAgo * 24 * 60 * 60 * 1000)),
+      sessionType: template.sessionType,
+      sessionNotes: template.notes,
+      summary: template.summary,
+      status: template.status,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    batch.set(newSessionRef, sessionData);
     sessionsCreated++;
   }
 
-  try {
-    await batch.commit();
-    console.log(`Successfully created ${usersCreated} users and ${sessionsCreated} sessions.`);
-    return { usersCreated, sessionsCreated };
-  } catch (error) {
-    console.error("Error committing batch for dummy data:", error);
-    if (error instanceof Error && (error.message.includes("Firebase is not configured") || error.message.includes("Firestore DB is not initialized"))) {
-      throw error;
-    }
-    throw new Error("Failed to generate dummy data. Batch commit failed. Check server logs.");
-  }
+  await batch.commit();
+
+  console.log(`Successfully created ${clientsCreated} clients and ${sessionsCreated} sessions for coach ${coach.coachName}.`);
+  return { clientsCreated, sessionsCreated };
 }

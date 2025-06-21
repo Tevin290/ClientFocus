@@ -1,40 +1,84 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useForm, type SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { PageHeader } from "@/components/shared/page-header";
 import { StripeSettingsForm } from "@/components/forms/stripe-settings-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Database, Loader2, TriangleAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { generateDummyData } from '@/lib/dummyDataService'; // Import the new service
+import { generateDummyDataForCoach } from '@/lib/dummyDataService';
+import { getAllCoaches, type UserProfile } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
-import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/components/ui/alert'; // Renamed to avoid conflict
+import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/components/ui/alert';
 import { isFirebaseConfigured } from '@/lib/firebase';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+const selectCoachSchema = z.object({
+  coachId: z.string().min(1, 'Please select a coach.'),
+});
+
+type SelectCoachFormValues = z.infer<typeof selectCoachSchema>;
 
 export default function AdminSettingsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [coaches, setCoaches] = useState<UserProfile[]>([]);
+  const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const { toast } = useToast();
   const { role, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
   }, []);
 
-  const handleGenerateData = async () => {
+  const form = useForm<SelectCoachFormValues>({
+    resolver: zodResolver(selectCoachSchema),
+  });
+
+  useEffect(() => {
+    if (!firebaseAvailable || role !== 'admin') {
+      setIsFetchingCoaches(false);
+      return;
+    }
+    const fetchCoaches = async () => {
+      setIsFetchingCoaches(true);
+      try {
+        const fetchedCoaches = await getAllCoaches();
+        setCoaches(fetchedCoaches);
+      } catch (error) {
+        console.error("Failed to fetch coaches:", error);
+        toast({ title: "Error", description: "Could not load the list of coaches.", variant: "destructive" });
+      } finally {
+        setIsFetchingCoaches(false);
+      }
+    };
+    fetchCoaches();
+  }, [firebaseAvailable, role, toast]);
+
+  const handleGenerateData: SubmitHandler<SelectCoachFormValues> = async (data) => {
     if (!firebaseAvailable) {
       toast({ title: "Operation Failed", description: "Firebase is not configured. Cannot generate data.", variant: "destructive" });
       return;
     }
+
+    const selectedCoach = coaches.find(c => c.uid === data.coachId);
+    if (!selectedCoach) {
+      toast({ title: "Error", description: "Selected coach not found.", variant: "destructive" });
+      return;
+    }
+
     setIsGenerating(true);
     try {
-      const result = await generateDummyData();
+      const result = await generateDummyDataForCoach({ coachId: selectedCoach.uid, coachName: selectedCoach.displayName });
       toast({
         title: "Dummy Data Generation Complete",
-        description: `${result.usersCreated} users and ${result.sessionsCreated} sessions created. Check Firebase console.`,
+        description: `${result.clientsCreated} clients and ${result.sessionsCreated} sessions created for ${selectedCoach.displayName}.`,
         duration: 7000,
       });
     } catch (error: any) {
@@ -66,7 +110,6 @@ export default function AdminSettingsPage() {
     );
   }
 
-
   return (
     <div>
       <PageHeader title="Application Settings" description="Manage integrations and platform configurations."/>
@@ -86,29 +129,58 @@ export default function AdminSettingsPage() {
                <Alert variant="destructive" className="mb-4">
                   <TriangleAlert className="h-4 w-4" />
                   <UiAlertTitle>Firebase Not Configured</UiAlertTitle>
-                  <AlertDescription>Dummy data generation is disabled because Firebase is not configured in `src/lib/firebase.ts`.</AlertDescription>
+                  <AlertDescription>Dummy data generation is disabled because Firebase is not configured.</AlertDescription>
               </Alert>
             )}
-            <p className="text-sm text-muted-foreground mb-4">
-              Use this button to populate your Firestore database with sample users and sessions.
-              This is useful for testing features without manual data entry.
-              Ensure you have created corresponding users in Firebase Authentication first
-              (e.g., admin@example.com, coach@example.com, client@example.com with password 'password123').
-            </p>
-            <Button 
-              onClick={handleGenerateData} 
-              disabled={isGenerating || !firebaseAvailable}
-              variant="outline"
-              className="hover:border-primary"
-            >
-              {isGenerating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Database className="mr-2 h-4 w-4" />
-              )}
-              Generate Dummy Firestore Data
-            </Button>
-            {isGenerating && <p className="text-sm text-primary mt-2">Generating data, please wait...</p>}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleGenerateData)} className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Select a coach from the dropdown below to generate sample clients and session data for them.
+                  This is useful for demonstrating the coach's dashboard and client list features without affecting real client data.
+                </p>
+                <FormField
+                  control={form.control}
+                  name="coachId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Select Coach</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isFetchingCoaches || coaches.length === 0 || !firebaseAvailable}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={
+                              isFetchingCoaches ? "Loading coaches..." : 
+                              coaches.length === 0 ? "No coaches found" : "Select a coach to generate data for"
+                            } />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {coaches.map(coach => (
+                            <SelectItem key={coach.uid} value={coach.uid}>
+                              {coach.displayName} ({coach.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  disabled={isGenerating || !firebaseAvailable || isFetchingCoaches || !form.formState.isValid}
+                  variant="outline"
+                  className="hover:border-primary"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Database className="mr-2 h-4 w-4" />
+                  )}
+                  Generate Data for Selected Coach
+                </Button>
+                {isGenerating && <p className="text-sm text-primary mt-2">Generating data, please wait...</p>}
+              </form>
+            </Form>
           </CardContent>
         </Card>
       </div>
