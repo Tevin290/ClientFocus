@@ -1,40 +1,58 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper function to securely identify an admin.
+    
+    // Helper function to determine if the requester is an admin
     function isAdmin() {
-      // This get() call is the source of truth for admin status.
-      // It checks the user's own document in the 'users' collection.
+      // Admins are identified by a 'role' field in their user document.
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // --- Global Admin Rule ---
-    // If the user is an admin, they can do anything to any document.
-    // This rule is checked first for any path and grants universal access.
+    // --- ADMIN GOD MODE ---
+    // A single rule to grant admins universal read/write access to everything.
+    // This simplifies all other rules as we only need to consider non-admin cases.
     match /{document=**} {
       allow read, write: if isAdmin();
     }
-
-    // --- User Collection Rules (for non-admins) ---
-    // These rules only apply if the user is NOT an admin.
-    match /users/{userId} {
-      // Allow a non-admin to create their own user document during signup.
-      allow create: if request.auth.uid == userId;
-
-      // Allow a non-admin to read and update their own user document.
-      allow read, update: if request.auth.uid == userId;
-    }
     
-    // --- Sessions Collection Rules (for non-admins) ---
-    // These rules only apply if the user is NOT an admin.
+    // --- NON-ADMIN RULES ---
+
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // Allow user creation for the public signup page, with basic validation.
+      allow create: if (
+        request.resource.data.role == 'client' && 
+        request.resource.data.coachId is string
+      ) || (
+        (request.resource.data.role == 'coach' || request.resource.data.role == 'admin') &&
+        request.resource.data.email.matches('.*@hmperform.com')
+      );
+
+      // A user can read their own profile document.
+      allow read: if request.auth.uid == userId;
+
+      // A user can update their own document, but they cannot change their role.
+      allow update: if request.auth.uid == userId && request.resource.data.role == resource.data.role;
+
+      // Allow authenticated users to perform queries on the users collection.
+      // This is necessary for fetching lists of coaches (for clients/admins)
+      // and lists of clients (for coaches).
+      // The queries themselves must be constructed securely on the client-side.
+      allow list: if request.auth != null;
+    }
+
+    // Rules for the 'sessions' collection
     match /sessions/{sessionId} {
-      // Allow a non-admin (coach or client) to read their own sessions.
+      // A coach can create a session for one of their clients.
+      allow create: if request.auth.uid == request.resource.data.coachId;
+      
+      // A session can be read by the coach who ran it or the client who received it.
       allow read: if request.auth.uid == resource.data.coachId || request.auth.uid == resource.data.clientId;
       
-      // Allow a non-admin (specifically a coach) to create or update sessions they are the coach for.
-      allow create, update: if request.auth.uid == request.resource.data.coachId;
+      // Only the coach who created the session can update it.
+      allow update: if request.auth.uid == resource.data.coachId;
     }
   }
 }

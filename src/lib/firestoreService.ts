@@ -25,6 +25,7 @@ export interface UserProfile {
   role: UserRole;
   photoURL?: string | null;
   createdAt: Timestamp | FieldValue; // Allow for FieldValue on create
+  updatedAt?: Timestamp | FieldValue;
   coachId?: string;
   stripeCustomerId?: string;
 }
@@ -100,6 +101,19 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
     throw new Error(detailedMessage);
   }
+}
+
+
+export async function updateUserProfile(uid: string, updates: Partial<UserProfile>): Promise<void> {
+    ensureFirebaseIsOperational();
+    try {
+        const userDocRef = doc(db, 'users', uid);
+        const updateData = { ...updates, updatedAt: serverTimestamp() };
+        await updateDoc(userDocRef, updateData);
+    } catch (error: any) {
+        console.error(`Detailed Firebase Error in updateUserProfile for UID ${uid}:`, error);
+        throw new Error(`Failed to update user profile for UID ${uid}.`);
+    }
 }
 
 

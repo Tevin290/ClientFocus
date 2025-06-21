@@ -73,7 +73,7 @@ const navItems: NavItem[] = [
 
   { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: false },
   { href: '/client/history', label: 'Session History', icon: History, roles: ['client'], disabled: false },
-  { href: '/client/profile', label: 'My Profile', icon: UserCircle, roles: ['client'], disabled: true }, // Keep disabled
+  { href: '/client/settings', label: 'Settings', icon: Settings, roles: ['client'], disabled: false },
 ];
 
 const AppLogo = () => (
