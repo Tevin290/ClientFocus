@@ -41,7 +41,6 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [isSubmittingReal, setIsSubmittingReal] = useState(false);
   const [firebaseAvailable, setFirebaseAvailable] = useState(isFirebaseConfigured());
 
   const prefilledClientId = searchParams.get('clientId');
@@ -61,6 +60,8 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
       summary: '',
     },
   });
+
+  const { formState: { isSubmitting } } = form;
 
   const handleGenerateSummary = async () => {
     const notes = form.getValues('sessionNotes');
@@ -95,7 +96,8 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
       toast({ title: "Operation Failed", description: "Firebase is not configured. Cannot log session.", variant: "destructive" });
       return;
     }
-    setIsSubmittingReal(true);
+    
+    console.log("[SessionLogForm] Submission started. Data:", data);
 
     const sessionDataToLog: NewSessionData = {
       coachId,
@@ -113,20 +115,19 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
 
     try {
       await logSession(sessionDataToLog);
+      console.log("[SessionLogForm] Session successfully logged to Firestore. Redirecting...");
       toast({
         title: 'Session Logged!',
         description: `Session for ${data.clientName} has been recorded.`,
       });
       router.push('/coach/log-session/success');
     } catch (error) {
-      console.error('Error logging session to Firestore:', error);
+      console.error('[SessionLogForm] Error logging session to Firestore:', error);
       toast({
         title: 'Logging Failed',
-        description: 'Could not save session to database. Please try again.',
+        description: 'Could not save session to database. Check console for details.',
         variant: 'destructive',
       });
-    } finally {
-      setIsSubmittingReal(false);
     }
   };
 
@@ -242,9 +243,18 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
 
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full sm:w-auto" disabled={form.formState.isSubmitting || isSummarizing || isSubmittingReal || !firebaseAvailable}>
-              {isSubmittingReal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Log Session
+            <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting || isSummarizing || !firebaseAvailable}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Logging...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Log Session
+                </>
+              )}
             </Button>
           </CardFooter>
         </form>
