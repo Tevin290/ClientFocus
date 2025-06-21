@@ -1,94 +1,29 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // HELPER FUNCTIONS
-    // =================================
-    
-    // Checks if the user is authenticated
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    // Checks if the user is accessing their own data
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-    
-    // Determines the role based on the email address. This is the source of truth.
-    // The default admin email is hardcoded here for simplicity.
-    function getRoleByEmail(email) {
-      return email.matches('.*@hmperform\\.com$')
-        ? (email == 'hello@hmperform.com' ? 'admin' : 'coach')
-        : 'client';
-    }
-
-    // Checks if the requesting user has a specific role
-    function hasRole(role) {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
-    }
-
-    // USER PROFILES
-    // =================================
     match /users/{userId} {
+      // A user can create their own document if the document ID is their UID.
+      allow create: if request.auth != null && request.auth.uid == userId;
       
-      // CREATE: A new user can create their own profile document.
-      allow create: if isOwner(userId) &&
-                       // The `uid` in the document must match the authenticated user's UID.
-                       request.resource.data.uid == userId &&
-                       // The `role` in the document must match the role determined by their email.
-                       request.resource.data.role == getRoleByEmail(request.resource.data.email) &&
-                       // Required fields must exist.
-                       'displayName' in request.resource.data &&
-                       'email' in request.resource.data &&
-                       'createdAt' in request.resource.data;
+      // A user can read or update their own document.
+      allow read, update: if request.auth != null && request.auth.uid == userId;
 
-      // READ: Users can read their own profile. Admins can read any profile.
-      allow read: if isOwner(userId) || hasRole('admin');
-
-      // UPDATE: Users can update their own profile.
-      // Admins can also update user profiles (e.g., to assign a coach).
-      // Disallow changing role or email via update for security.
-      allow update: if (isOwner(userId) || hasRole('admin')) &&
-                       request.resource.data.role == resource.data.role &&
-                       request.resource.data.email == resource.data.email;
-
-      // DELETE: Nobody can delete user profiles for data integrity.
+      // No one can delete for now.
       allow delete: if false;
     }
-    
-    // SESSIONS
-    // =================================
+
     match /sessions/{sessionId} {
+      // A coach can create/update a session.
+      // For creation, the coachId in the new document must match the creator's UID.
+      // For update, the coachId in the existing document must match the updater's UID.
+      allow create: if request.auth.uid == request.resource.data.coachId;
+      allow update: if request.auth.uid == resource.data.coachId;
 
-      // CREATE: Only coaches can create new session logs.
-      allow create: if hasRole('coach') &&
-                       // The coachId in the session must match the person creating it.
-                       request.resource.data.coachId == request.auth.uid;
-                       
-      // READ:
-      // Admins can read any session.
-      // Coaches can read sessions they created.
-      // Clients can read sessions where they are the client.
-      allow read: if isSignedIn() &&
-                     (hasRole('admin') ||
-                      resource.data.coachId == request.auth.uid ||
-                      resource.data.clientId == request.auth.uid);
-                      
-      // UPDATE: Admins or the coach who owns the session can update it.
-      allow update: if isSignedIn() &&
-                       (hasRole('admin') || resource.data.coachId == request.auth.uid);
-
-      // DELETE: Only admins can delete sessions.
-      allow delete: if hasRole('admin');
-    }
-
-    // APP SETTINGS (e.g., Stripe keys)
-    // =================================
-    match /appSettings/{settingId} {
-      // Only admins can read or write to app settings.
-      allow read, write: if hasRole('admin');
+      // The client or the coach associated with the session can read it.
+      allow read: if request.auth.uid == resource.data.clientId || request.auth.uid == resource.data.coachId;
+      
+      // Deleting sessions is disabled for now for safety.
+      allow delete: if false;
     }
   }
 }
