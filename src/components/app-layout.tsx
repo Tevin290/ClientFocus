@@ -87,13 +87,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { role, userProfile, isLoading: isRoleLoading, logout } = useRole(); // Use userProfile for display
   const router = useRouter(); 
-  const [isMounted, setIsMounted] = useState(false);
   const [isStripeTestMode, setIsStripeTestMode] = useState(false); // This could come from Firestore appSettings later
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const { toast } = useToast();
 
   useEffect(() => {
-    setIsMounted(true);
     const storedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
     if (storedTheme) {
       setTheme(storedTheme);
@@ -104,11 +102,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
   }, []);
   
-  // RoleContext now handles redirection if not authenticated.
-  // This useEffect might only be needed for very specific post-auth checks or if RoleContext doesn't cover all cases.
-  // For now, relying on RoleContext's useEffect.
-
-
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
@@ -128,38 +121,30 @@ export function AppLayout({ children }: { children: ReactNode }) {
   });
 
 
-  if (!isMounted || isRoleLoading ) {
-     // Allow access to success page without full auth check, RoleContext will redirect if needed later
-    if (pathname.startsWith('/coach/log-session/success') && !isRoleLoading && !role) {
-      // If on success page and role is determined as null (meaning not logged in), RoleContext will redirect.
-      // This check is to prevent flashing the skeleton if we are intentionally on the success page post-action.
-    } else if (pathname !== '/login') { // Don't show skeleton on login page itself
-        return (
-          <div className="flex flex-col h-screen">
-            <div className="flex items-center justify-between p-4 border-b">
-              <Skeleton className="h-8 w-32" />
-              <Skeleton className="h-8 w-8 rounded-full" />
-            </div>
-            <div className="flex flex-1 overflow-hidden">
-              <div className="w-64 p-4 border-r">
-                {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-8 w-full mb-2" />
-                ))}
-              </div>
-              <div className="flex-1 p-6">
-                <Skeleton className="h-32 w-full mb-4" />
-                <Skeleton className="h-64 w-full" />
-              </div>
-            </div>
+  if (isRoleLoading) {
+    return (
+      <div className="flex flex-col h-screen">
+        <div className="flex items-center justify-between p-4 border-b">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </div>
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-64 p-4 border-r">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full mb-2" />
+            ))}
           </div>
-        );
-    }
+          <div className="flex-1 p-6">
+            <Skeleton className="h-32 w-full mb-4" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </div>
+    );
   }
   
-  // If not loading and no role, and not on login or success page, RoleContext should have redirected.
-  // This is a fallback but ideally RoleContext handles it.
-  if (!isRoleLoading && !role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) {
-    return null; 
+  if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) {
+    return null; // Let RoleContext handle the redirect
   }
 
 

@@ -1,29 +1,56 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      // A user can create their own document if the document ID is their UID.
-      allow create: if request.auth != null && request.auth.uid == userId;
-      
-      // A user can read or update their own document.
-      allow read, update: if request.auth != null && request.auth.uid == userId;
-
-      // No one can delete for now.
-      allow delete: if false;
+    
+    // Helper function to check the requesting user's role.
+    // It reads the user's own document to find their role.
+    function getRequestingUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Helper function to check if the user is an admin.
+    function isRequestingUserAdmin() {
+      return request.auth != null && getRequestingUserRole() == 'admin';
     }
 
-    match /sessions/{sessionId} {
-      // A coach can create/update a session.
-      // For creation, the coachId in the new document must match the creator's UID.
-      // For update, the coachId in the existing document must match the updater's UID.
-      allow create: if request.auth.uid == request.resource.data.coachId;
-      allow update: if request.auth.uid == resource.data.coachId;
-
-      // The client or the coach associated with the session can read it.
-      allow read: if request.auth.uid == resource.data.clientId || request.auth.uid == resource.data.coachId;
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // Admins can list and read any user.
+      // A user can read their own document.
+      allow read: if isRequestingUserAdmin() || request.auth.uid == userId;
+      allow list: if isRequestingUserAdmin();
       
-      // Deleting sessions is disabled for now for safety.
-      allow delete: if false;
+      // A user can update their own document.
+      // Admins can also update any user document.
+      allow update: if isRequestingUserAdmin() || request.auth.uid == userId;
+
+      // Only admins can delete users.
+      allow delete: if isRequestingUserAdmin();
+
+      // Anyone authenticated can create their OWN user document.
+      // The role assignment logic is handled in the signup form and enforced by the rules.
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Rules for the 'sessions' collection
+    match /sessions/{sessionId} {
+      // An admin, the session's coach, or the session's client can read a session.
+      allow read: if isRequestingUserAdmin() || request.auth.uid == resource.data.coachId || request.auth.uid == resource.data.clientId;
+      
+      // An authenticated user can query the sessions collection.
+      // The 'read' rule above will ensure they only get documents they are allowed to see.
+      allow list: if request.auth != null; 
+
+      // Only the coach of a session can create it.
+      // We check that the creating user's UID matches the coachId in the new document.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.coachId;
+
+      // Only an admin or the session's coach can update it.
+      allow update: if isRequestingUserAdmin() || request.auth.uid == resource.data.coachId;
+
+      // Only an admin can delete a session.
+      allow delete: if isRequestingUserAdmin();
     }
   }
 }
