@@ -22,6 +22,7 @@ interface RoleContextType {
   role: UserRole;
   isLoading: boolean;
   logout: () => Promise<void>;
+  refetchUserProfile: () => Promise<void>; // Add refetch function
 }
 
 const RoleContext = React.createContext<RoleContextType | undefined>(undefined);
@@ -103,6 +104,25 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [isLoading, user, role, pathname, router]);
 
+  const refetchUserProfile = React.useCallback(async () => {
+    if (!user?.uid) {
+      console.warn("[RoleContext] Cannot refetch, no user ID available.");
+      return;
+    }
+    try {
+      const profile = await getUserProfile(user.uid);
+      if (profile) {
+        setUserProfile(profile);
+        setRoleState(profile.role);
+      } else {
+        console.warn(`[RoleContext] Refetched profile for ${user.uid} but it was null.`);
+        setUserProfile(null);
+        setRoleState(null);
+      }
+    } catch (error) {
+      console.error("[RoleContext] Error refetching user profile:", error);
+    }
+  }, [user]);
 
   const logout = async () => {
     setIsLoading(true);
@@ -111,7 +131,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <RoleContext.Provider value={{ user, userProfile, role, isLoading, logout }}>
+    <RoleContext.Provider value={{ user, userProfile, role, isLoading, logout, refetchUserProfile }}>
       {children}
     </RoleContext.Provider>
   );

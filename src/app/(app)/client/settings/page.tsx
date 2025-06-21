@@ -25,7 +25,7 @@ type SelectCoachFormValues = z.infer<typeof selectCoachSchema>;
 
 export default function ClientSettingsPage() {
   const { toast } = useToast();
-  const { user, userProfile, isLoading: isRoleLoading, role } = useRole();
+  const { user, userProfile, isLoading: isRoleLoading, role, refetchUserProfile } = useRole();
   const [isSaving, setIsSaving] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
@@ -84,6 +84,7 @@ export default function ClientSettingsPage() {
     setIsSaving(true);
     try {
       await updateUserProfile(user.uid, { coachId: data.coachId });
+      await refetchUserProfile(); // Refetch the user profile to update the UI
       toast({
         title: "Coach Updated!",
         description: `Your coach has been successfully updated.`,
@@ -186,4 +187,3 @@ export default function ClientSettingsPage() {
     </div>
   );
 }
-
