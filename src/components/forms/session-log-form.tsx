@@ -10,19 +10,17 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
 import { Bot, Save, Loader2, TriangleAlert } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { logSession, type NewSessionData } from '@/lib/firestoreService';
+import { logSession, type NewSessionData, type UserProfile } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 const sessionLogSchema = z.object({
-  clientId: z.string().optional(),
-  clientName: z.string().min(1, 'Client Name is required'),
-  clientEmail: z.string().email('Invalid email address').min(1, 'Client Email is required'),
+  clientId: z.string().min(1, 'Please select a client.'),
   sessionDate: z.string().min(1, "Session date is required"),
   videoLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   sessionType: z.enum(['Full', 'Half'], { required_error: 'Session Type is required' }),
@@ -35,9 +33,10 @@ type SessionLogFormValues = z.infer<typeof sessionLogSchema>;
 interface SessionLogFormProps {
   coachId: string;
   coachName: string;
+  clients: UserProfile[]; // Now receives a list of clients
 }
 
-export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
+export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormProps) {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -45,7 +44,6 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
   const [firebaseAvailable, setFirebaseAvailable] = useState(true);
 
   const prefilledClientId = searchParams.get('clientId');
-  const prefilledClientName = searchParams.get('clientName');
 
   useEffect(() => {
     const isConfigured = isFirebaseConfigured();
@@ -65,8 +63,6 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
     resolver: zodResolver(sessionLogSchema),
     defaultValues: {
       clientId: prefilledClientId || '',
-      clientName: prefilledClientName || '',
-      clientEmail: '',
       sessionDate: new Date().toISOString().split('T')[0],
       videoLink: '',
       sessionType: undefined,
@@ -120,14 +116,20 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
       return;
     }
     
+    const selectedClient = clients.find(c => c.uid === data.clientId);
+    if (!selectedClient) {
+      toast({ title: "Client not found", description: "The selected client could not be found. Please refresh and try again.", variant: "destructive" });
+      return;
+    }
+
     console.log("[SessionLogForm] Submission started. Data:", data);
 
     const sessionDataToLog: NewSessionData = {
       coachId,
       coachName,
-      clientId: data.clientId || `unknown_client_${Date.now()}`,
-      clientName: data.clientName,
-      clientEmail: data.clientEmail,
+      clientId: selectedClient.uid,
+      clientName: selectedClient.displayName,
+      clientEmail: selectedClient.email,
       sessionDate: new Date(data.sessionDate),
       sessionType: data.sessionType,
       videoLink: data.videoLink,
@@ -141,7 +143,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
       console.log("[SessionLogForm] Session successfully logged to Firestore. Redirecting...");
       toast({
         title: 'Session Logged!',
-        description: `Session for ${data.clientName} has been recorded.`,
+        description: `Session for ${selectedClient.displayName} has been recorded.`,
       });
       router.push('/coach/log-session/success');
     } catch (error) {
@@ -172,30 +174,31 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
                 </AlertDescription>
               </Alert>
             )}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="clientName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Full Name</FormLabel>
-                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} readOnly={!!prefilledClientName} disabled={!firebaseAvailable} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="clientEmail"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Email</FormLabel>
-                    <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} disabled={!firebaseAvailable} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            
+            <FormField
+              control={form.control}
+              name="clientId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!firebaseAvailable}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {clients.map(client => (
+                        <SelectItem key={client.uid} value={client.uid}>
+                          {client.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
                 control={form.control}

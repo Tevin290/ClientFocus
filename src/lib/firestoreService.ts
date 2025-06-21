@@ -37,9 +37,9 @@ export interface NewSessionData {
   clientEmail: string;
   sessionDate: Date;
   sessionType: 'Full' | 'Half';
-  videoLink?: string;
+  videoLink?: string | '';
   sessionNotes: string;
-  summary?: string;
+  summary?: string | '';
   status: 'Logged' | 'Reviewed' | 'Billed';
 }
 
@@ -265,5 +265,49 @@ export async function getAllCoaches(): Promise<UserProfile[]> {
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getAllCoaches:`, error);
     throw new Error(`Failed to fetch coaches. See server logs for details.`);
+  }
+}
+
+export async function getCoachClients(coachId: string): Promise<UserProfile[]> {
+  ensureFirebaseIsOperational();
+  try {
+    const usersCol = collection(db, 'users');
+    const q = query(
+      usersCol,
+      where('role', '==', 'client'),
+      where('coachId', '==', coachId),
+      orderBy('displayName', 'asc')
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return [];
+    }
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      let createdAtTimestamp: Timestamp;
+      if (data.createdAt instanceof Timestamp) {
+        createdAtTimestamp = data.createdAt;
+      } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+        createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+      } else {
+        createdAtTimestamp = Timestamp.now();
+      }
+      return {
+        uid: data.uid,
+        email: data.email,
+        displayName: data.displayName,
+        role: 'client',
+        photoURL: data.photoURL || null,
+        createdAt: createdAtTimestamp,
+        coachId: data.coachId,
+      } as UserProfile;
+    });
+  } catch (error: any) {
+    console.error(`Detailed Firebase Error in getCoachClients for coachID ${coachId}:`, error);
+    if (error.code === 'failed-precondition') {
+      console.error("This error likely means you need to create a composite index in Firestore. Check the browser console for a link to create it.");
+      throw new Error(`Failed to fetch clients for coach ID ${coachId}. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
+    }
+    throw new Error(`Failed to fetch clients for coach ID ${coachId}. See server logs for details.`);
   }
 }
