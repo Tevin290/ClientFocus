@@ -43,9 +43,6 @@ export interface NewSessionData {
   status: 'Logged' | 'Reviewed' | 'Billed';
 }
 
-// Note: createUserProfileInFirestore is no longer called by the signup page.
-// The logic has been inlined into `signup/page.tsx`.
-// This function is kept for potential future use or for server-side scripts like dummy data generation.
 export async function createUserProfileInFirestore(
   uid: string,
   profileData: Omit<UserProfile, 'uid' | 'createdAt'> & { createdAt?: FieldValue | Timestamp }

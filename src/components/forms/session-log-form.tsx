@@ -14,8 +14,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
 import { Bot, Save, Loader2 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
-import { logSession, type NewSessionData } from '@/lib/firestoreService'; // Import logSession and NewSessionData
+import { useRouter, useSearchParams } from 'next/navigation';
+import { logSession, type NewSessionData } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
 const sessionLogSchema = z.object({
@@ -39,7 +39,7 @@ interface SessionLogFormProps {
 export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams(); // For getting clientId from URL if navigating from client's page
+  const searchParams = useSearchParams();
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isSubmittingReal, setIsSubmittingReal] = useState(false);
   const [firebaseAvailable, setFirebaseAvailable] = useState(isFirebaseConfigured());
@@ -51,7 +51,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
   const form = useForm<SessionLogFormValues>({
     resolver: zodResolver(sessionLogSchema),
     defaultValues: {
-      clientId: prefilledClientId || '', // Set if available
+      clientId: prefilledClientId || '',
       clientName: prefilledClientName || '',
       clientEmail: '',
       sessionDate: new Date().toISOString().split('T')[0],
@@ -97,20 +97,10 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
     }
     setIsSubmittingReal(true);
 
-    // TODO: In a real app, you might have a client selection dropdown if not pre-filled
-    // For now, we'll assume clientName and clientEmail are sufficient to identify or create a client record if needed.
-    // If clientId is missing, you might want to query Firestore for a client by email or handle it.
-    // For this example, if clientId is missing from URL, it's an issue.
-    // However, the schema allows it to be optional for now. Ideally, it's always present.
-
     const sessionDataToLog: NewSessionData = {
       coachId,
       coachName,
-      // For clientId, if you have a client selection mechanism, use that.
-      // If navigating from "Log session for Client X", then clientId would be pre-filled.
-      // For now, if not prefilled, it's an issue. We should enforce it or have a client lookup.
-      // This is a simplified example.
-      clientId: data.clientId || `unknown_client_${Date.now()}`, // Fallback, not ideal for real app
+      clientId: data.clientId || `unknown_client_${Date.now()}`,
       clientName: data.clientName,
       clientEmail: data.clientEmail,
       sessionDate: new Date(data.sessionDate),
@@ -149,20 +139,6 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
-            {/* Client ID field - can be hidden if always prefilled or handled differently */}
-            {/* 
-            <FormField
-              control={form.control}
-              name="clientId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client ID (Auto-filled if available)</FormLabel>
-                  <FormControl><Input placeholder="Client's unique ID" {...field} readOnly={!!prefilledClientId} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            */}
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -248,7 +224,7 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
 
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <FormLabel htmlFor="summary">AI Generated Summary</FormLabel> {/* Changed from Label to FormLabel */}
+                <FormLabel htmlFor="summary">AI Generated Summary</FormLabel>
                 <Button type="button" variant="outline" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing || !firebaseAvailable} className="hover:border-primary">
                   {isSummarizing ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
