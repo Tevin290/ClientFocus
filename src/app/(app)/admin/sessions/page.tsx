@@ -21,8 +21,8 @@ import { useRole } from '@/context/role-context';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-type SessionStatus = 'Logged' | 'Reviewed' | 'Billed';
-// Session type is already imported from firestoreService
+type SessionStatus = 'Under Review' | 'Approved' | 'Billed';
+// Session type is imported from firestoreService via session-card
 
 export default function AdminSessionReviewPage() {
   const { toast } = useToast();
@@ -86,12 +86,12 @@ export default function AdminSessionReviewPage() {
   
   const getStatusBadge = (status: SessionStatus) => {
     switch (status) {
-      case 'Logged':
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200"><Clock className="mr-1 h-3 w-3" />Logged</Badge>;
-      case 'Reviewed':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200"><Eye className="mr-1 h-3 w-3" />Reviewed</Badge>;
+      case 'Under Review':
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200"><Clock className="mr-1 h-3 w-3" />Under Review</Badge>;
+      case 'Approved':
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200"><CheckCircle className="mr-1 h-3 w-3" />Approved</Badge>;
       case 'Billed':
-        return <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200"><CheckCircle className="mr-1 h-3 w-3" />Billed</Badge>;
+        return <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200"><DollarSign className="mr-1 h-3 w-3" />Billed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -100,7 +100,7 @@ export default function AdminSessionReviewPage() {
   if (isLoading || isRoleLoading) {
     return (
       <div>
-        <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+        <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="ml-2">Loading sessions...</p>
@@ -112,7 +112,7 @@ export default function AdminSessionReviewPage() {
   if (role !== 'admin') {
      return (
       <div>
-        <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+        <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
         <Alert variant="destructive">
             <TriangleAlert className="h-4 w-4" />
             <AlertTitle>Access Denied</AlertTitle>
@@ -125,7 +125,7 @@ export default function AdminSessionReviewPage() {
   if (!firebaseAvailable) {
      return (
       <div>
-        <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+        <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
         <Alert variant="destructive" className="shadow-light">
           <TriangleAlert className="h-5 w-5" />
           <AlertTitle className="font-headline">Feature Unavailable</AlertTitle>
@@ -140,11 +140,11 @@ export default function AdminSessionReviewPage() {
 
   return (
     <div>
-      <PageHeader title="Session Review" description="Review submitted sessions and manage billing." />
+      <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
       <Card className="shadow-light">
         <CardHeader>
           <CardTitle className="font-headline">Submitted Sessions</CardTitle>
-          <CardDescription>Awaiting review or billing.</CardDescription>
+          <CardDescription>Awaiting approval or billing.</CardDescription>
         </CardHeader>
         <CardContent>
           {sessions.length === 0 ? (
@@ -180,14 +180,14 @@ export default function AdminSessionReviewPage() {
                       <Button variant="outline" size="sm" onClick={() => alert(`Notes for ${session.clientName}:\n${session.notes || session.summary || 'No notes available.'}`)} className="hover:border-primary" aria-label="View Notes">
                         <FileText className="h-4 w-4" />
                       </Button>
-                      {session.status === 'Logged' && (
-                        <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Reviewed')} className="hover:border-primary">
-                          <Eye className="mr-1 h-4 w-4" /> Review
+                      {session.status === 'Under Review' && (
+                        <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Approved')} className="hover:border-primary">
+                          <CheckCircle className="mr-1 h-4 w-4" /> Approve
                         </Button>
                       )}
-                      {session.status === 'Reviewed' && (
+                      {session.status === 'Approved' && (
                         <Button variant="default" size="sm" onClick={() => handleUpdateStatus(session.id, 'Billed')} className="bg-success hover:bg-success/90 text-success-foreground">
-                          <DollarSign className="mr-1 h-4 w-4" /> Bill
+                          <DollarSign className="mr-1 h-4 w-4" /> Bill Client
                         </Button>
                       )}
                     </TableCell>

@@ -41,7 +41,7 @@ export interface NewSessionData {
   videoLink?: string | '';
   sessionNotes: string;
   summary?: string | '';
-  status: 'Logged' | 'Reviewed' | 'Billed';
+  status: 'Under Review' | 'Approved' | 'Billed';
 }
 
 export async function createUserProfileInFirestore(

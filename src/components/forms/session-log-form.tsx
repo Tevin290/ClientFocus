@@ -137,7 +137,7 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
       videoLink: data.videoLink,
       sessionNotes: data.sessionNotes,
       summary: data.summary,
-      status: 'Logged',
+      status: 'Under Review',
     };
 
     try {

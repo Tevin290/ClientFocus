@@ -78,7 +78,7 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
       sessionType: 'Half',
       notes: 'Quick follow-up on action items. Good progress made, but we identified a roadblock with team alignment.',
       summary: 'Action item review.',
-      status: 'Logged',
+      status: 'Under Review',
     },
     {
       clientIndex: 1,
@@ -86,7 +86,7 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
       sessionType: 'Full',
       notes: 'Session on improving communication strategies. We role-played some difficult conversations.',
       summary: 'Communication strategy practice.',
-      status: 'Reviewed',
+      status: 'Approved',
     },
   ] as const;
 

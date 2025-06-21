@@ -1,7 +1,7 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Video, FileText, ClockIcon, Users } from "lucide-react";
+import { CalendarDays, Video, FileText, ClockIcon, Users, CheckCircle, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface Session {
@@ -14,7 +14,7 @@ export interface Session {
   notes?: string; // Could be full notes or summary
   summary?: string;
   videoLink?: string;
-  status?: 'Logged' | 'Reviewed' | 'Billed'; // For admin/coach views
+  status?: 'Under Review' | 'Approved' | 'Billed'; // For admin/coach views
 }
 
 interface SessionCardProps {
@@ -27,6 +27,19 @@ export function SessionCard({ session, showActions = false, onViewDetails }: Ses
   const displayDate = new Date(session.sessionDate).toLocaleString(undefined, {
     year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
   });
+
+  const getStatusIcon = () => {
+    switch (session.status) {
+      case 'Under Review':
+        return <ClockIcon className="mr-2 h-4 w-4 text-primary" />;
+      case 'Approved':
+        return <CheckCircle className="mr-2 h-4 w-4 text-yellow-500" />;
+      case 'Billed':
+        return <DollarSign className="mr-2 h-4 w-4 text-green-500" />;
+      default:
+        return <ClockIcon className="mr-2 h-4 w-4 text-primary" />;
+    }
+  }
 
   return (
     <Card className="shadow-light hover:shadow-md transition-shadow duration-200">
@@ -65,7 +78,7 @@ export function SessionCard({ session, showActions = false, onViewDetails }: Ses
         
         {session.status && (
            <div className="flex items-center text-sm">
-            <ClockIcon className="mr-2 h-4 w-4 text-primary" />
+            {getStatusIcon()}
             <span className="text-muted-foreground">Status: {session.status}</span>
           </div>
         )}
