@@ -60,7 +60,7 @@ export default function ClientSessionsPage() {
   }, [clientId, firebaseAvailable, toast]);
   
   const handleEditSession = (sessionId: string) => {
-    alert(`Editing is not yet implemented. Session ID: ${sessionId}`);
+    router.push(`/coach/my-sessions/${sessionId}/edit`);
   };
   
   if (isLoading || isRoleLoading) {

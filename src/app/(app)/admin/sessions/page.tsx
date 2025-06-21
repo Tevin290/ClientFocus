@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle } from "lucide-react";
+import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -16,13 +16,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
-import { getAllSessionsForAdmin, updateSession, type Session } from '@/lib/firestoreService'; // Import real service
+import { getAllSessionsForAdmin, updateSession, type Session } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type SessionStatus = 'Under Review' | 'Approved' | 'Denied' | 'Billed';
-// Session type is imported from firestoreService via session-card
 
 export default function AdminSessionReviewPage() {
   const { toast } = useToast();
@@ -49,7 +48,7 @@ export default function AdminSessionReviewPage() {
           setSessions(fetchedSessions);
         } catch (error) {
           console.error("Failed to fetch sessions for review:", error);
-          toast({ title: "Error", description: "Could not load sessions.", variant: "destructive" });
+          toast({ title: "Error", description: "Could not load sessions. This may require creating a Firestore index. Check the browser console for a link.", variant: "destructive", duration: 7000 });
         } finally {
           setIsLoading(false);
         }
@@ -68,8 +67,15 @@ export default function AdminSessionReviewPage() {
     }
     try {
       await updateSession(sessionId, { status: newStatus });
-      // Remove the session from the list in the UI as its status has been actioned
-      setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
+      
+      // If admin approves, it goes to super-admin, so remove from view.
+      // Otherwise, update the status in place.
+      if (role === 'admin' && newStatus === 'Approved') {
+         setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
+      } else {
+         setSessions(prevSessions => prevSessions.map(s => s.id === sessionId ? { ...s, status: newStatus } : s));
+      }
+
       toast({
         title: `Session ${newStatus}`,
         description: `Session has been marked as ${newStatus.toLowerCase()}.`,
@@ -79,6 +85,14 @@ export default function AdminSessionReviewPage() {
       console.error(`Error updating session ${sessionId} to ${newStatus}:`, error);
       toast({ title: "Update Failed", description: "Could not update session status.", variant: "destructive" });
     }
+  };
+
+  const handleDismiss = (sessionId: string) => {
+    setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
+    toast({
+      title: 'Session Dismissed',
+      description: 'The session has been removed from your view.',
+    });
   };
   
   const getStatusBadge = (status: SessionStatus) => {
@@ -146,7 +160,7 @@ export default function AdminSessionReviewPage() {
       <Card className="shadow-light">
         <CardHeader>
           <CardTitle className="font-headline">
-            {role === 'super-admin' ? 'Awaiting Billing' : 'Awaiting Approval'}
+            {role === 'super-admin' ? 'Session Billing Queue' : 'Session Approval Queue'}
           </CardTitle>
           <CardDescription>
              {sessions.length === 0 ? "There are no sessions in this queue." : `Showing ${sessions.length} sessions.`}
@@ -197,11 +211,21 @@ export default function AdminSessionReviewPage() {
                           </Button>
                         </>
                       )}
+                       {role === 'admin' && session.status === 'Denied' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDismiss(session.id)}>
+                            <X className="mr-1 h-4 w-4 text-muted-foreground" /> Dismiss
+                          </Button>
+                       )}
                       
                       {role === 'super-admin' && session.status === 'Approved' && (
                         <Button variant="default" size="sm" onClick={() => handleUpdateStatus(session.id, 'Billed')} className="bg-success hover:bg-success/90 text-success-foreground">
                           <DollarSign className="mr-1 h-4 w-4" /> Bill Client
                         </Button>
+                      )}
+                      {role === 'super-admin' && session.status === 'Billed' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDismiss(session.id)}>
+                            <X className="mr-1 h-4 w-4 text-muted-foreground" /> Dismiss
+                          </Button>
                       )}
                     </TableCell>
                   </TableRow>

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { PageHeader } from "@/components/shared/page-header";
 import { SessionCard, type Session } from "@/components/shared/session-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -19,6 +20,7 @@ export default function CoachMySessionsPage() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const { toast } = useToast();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
@@ -52,13 +54,7 @@ export default function CoachMySessionsPage() {
 
 
   const handleEditSession = (sessionId: string) => {
-    // TODO: Implement navigation to an edit session page
-    // For now, an alert. This page would likely pre-fill the SessionLogForm with existing data.
-    // router.push(`/coach/edit-session/${sessionId}`);
-    toast({
-      title: "Edit Session (Not Implemented)",
-      description: `Navigation to edit session ${sessionId} is not yet implemented.`,
-    });
+    router.push(`/coach/my-sessions/${sessionId}/edit`);
   };
 
   if (isLoadingSessions || isRoleLoading) {

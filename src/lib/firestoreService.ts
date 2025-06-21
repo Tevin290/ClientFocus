@@ -232,11 +232,11 @@ export async function getAllSessionsForAdmin(role: UserRole): Promise<Session[]>
     let q;
 
     if (role === 'admin') {
-      // Admin sees sessions that are 'Under Review' to approve/deny
-      q = query(sessionsCol, where('status', '==', 'Under Review'), orderBy('sessionDate', 'desc'));
+      // Admin sees sessions that are 'Under Review' or 'Denied' to approve/deny/dismiss them.
+      q = query(sessionsCol, where('status', 'in', ['Under Review', 'Denied']), orderBy('sessionDate', 'desc'));
     } else if (role === 'super-admin') {
-      // Super Admin sees 'Approved' sessions to bill them
-      q = query(sessionsCol, where('status', '==', 'Approved'), orderBy('sessionDate', 'desc'));
+      // Super Admin sees 'Approved' or 'Billed' sessions to bill them or dismiss them.
+      q = query(sessionsCol, where('status', 'in', ['Approved', 'Billed']), orderBy('sessionDate', 'desc'));
     } else {
       console.warn(`getAllSessionsForAdmin called with an invalid role: ${role}`);
       return [];

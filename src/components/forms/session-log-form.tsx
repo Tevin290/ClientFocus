@@ -13,9 +13,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
-import { Bot, Save, Loader2, TriangleAlert } from 'lucide-react';
+import { Bot, Save, Loader2, TriangleAlert, Edit } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { logSession, type NewSessionData, type UserProfile } from '@/lib/firestoreService';
+import { logSession, updateSession, type NewSessionData, type UserProfile, type Session } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
@@ -34,16 +34,18 @@ type SessionLogFormValues = z.infer<typeof sessionLogSchema>;
 interface SessionLogFormProps {
   coachId: string;
   coachName: string;
-  clients: UserProfile[]; // Now receives a list of clients
+  clients: UserProfile[];
+  session?: Session | null; // For edit mode
 }
 
-export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormProps) {
+export function SessionLogForm({ coachId, coachName, clients, session }: SessionLogFormProps) {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [firebaseAvailable, setFirebaseAvailable] = useState(true);
 
+  const isEditMode = !!session;
   const prefilledClientId = searchParams.get('clientId');
 
   useEffect(() => {
@@ -52,24 +54,23 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
     if (!isConfigured) {
       toast({
         title: "Firebase Not Configured",
-        description: "Logging sessions is disabled. Please contact an administrator.",
+        description: "Submitting this form is disabled. Please contact an administrator.",
         variant: "destructive",
         duration: 8000
       });
     }
   }, [toast]);
 
-
   const form = useForm<SessionLogFormValues>({
     resolver: zodResolver(sessionLogSchema),
     defaultValues: {
-      clientId: prefilledClientId || '',
-      sessionDate: new Date().toISOString().split('T')[0],
-      sessionTime: new Date().toTimeString().slice(0, 5),
-      videoLink: '',
-      sessionType: undefined,
-      sessionNotes: '',
-      summary: '',
+      clientId: isEditMode ? session.clientId || '' : prefilledClientId || '',
+      sessionDate: isEditMode ? new Date(session.sessionDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      sessionTime: isEditMode ? new Date(session.sessionDate).toTimeString().slice(0, 5) : new Date().toTimeString().slice(0, 5),
+      videoLink: isEditMode ? session.videoLink || '' : '',
+      sessionType: isEditMode ? session.sessionType : undefined,
+      sessionNotes: isEditMode ? session.notes || '' : '',
+      summary: isEditMode ? session.summary || '' : '',
     },
   });
 
@@ -104,7 +105,7 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
   };
 
   const onInvalid = (errors: any) => {
-    console.error('[SessionLogForm] Form validation failed:', errors);
+    console.error(`[SessionLogForm] Form validation failed (isEditMode: ${isEditMode}):`, errors);
     toast({
       title: 'Invalid Form Data',
       description: 'Please check the form for errors and try again.',
@@ -114,7 +115,7 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
 
   const onSubmit: SubmitHandler<SessionLogFormValues> = async (data) => {
     if (!firebaseAvailable) {
-      toast({ title: "Operation Failed", description: "Firebase is not configured. Cannot log session.", variant: "destructive" });
+      toast({ title: "Operation Failed", description: "Firebase is not configured. Cannot save session.", variant: "destructive" });
       return;
     }
     
@@ -124,35 +125,44 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
       return;
     }
 
-    console.log("[SessionLogForm] Submission started. Data:", data);
-
-    const sessionDataToLog: NewSessionData = {
-      coachId,
-      coachName,
-      clientId: selectedClient.uid,
-      clientName: selectedClient.displayName,
-      clientEmail: selectedClient.email,
-      sessionDate: new Date(`${data.sessionDate}T${data.sessionTime}`),
-      sessionType: data.sessionType,
-      videoLink: data.videoLink,
-      sessionNotes: data.sessionNotes,
-      summary: data.summary,
-      status: 'Under Review',
-    };
-
     try {
-      await logSession(sessionDataToLog);
-      console.log("[SessionLogForm] Session successfully logged to Firestore. Redirecting...");
-      toast({
-        title: 'Session Logged!',
-        description: `Session for ${selectedClient.displayName} has been recorded.`,
-      });
-      router.push('/coach/log-session/success');
+      if (isEditMode && session.id) {
+        // UPDATE existing session
+        const updatePayload: Partial<Omit<Session, 'id'>> = {
+          sessionDate: new Date(`${data.sessionDate}T${data.sessionTime}`).toISOString(),
+          sessionType: data.sessionType,
+          videoLink: data.videoLink,
+          sessionNotes: data.sessionNotes,
+          summary: data.summary,
+          // Client cannot be changed in edit mode, so we don't include it here
+        };
+        await updateSession(session.id, updatePayload);
+        toast({ title: 'Session Updated!', description: `Your changes to the session for ${selectedClient.displayName} have been saved.` });
+        router.push('/coach/my-sessions');
+      } else {
+        // CREATE new session
+        const sessionDataToLog: NewSessionData = {
+          coachId,
+          coachName,
+          clientId: selectedClient.uid,
+          clientName: selectedClient.displayName,
+          clientEmail: selectedClient.email,
+          sessionDate: new Date(`${data.sessionDate}T${data.sessionTime}`),
+          sessionType: data.sessionType,
+          videoLink: data.videoLink,
+          sessionNotes: data.sessionNotes,
+          summary: data.summary,
+          status: 'Under Review',
+        };
+        await logSession(sessionDataToLog);
+        toast({ title: 'Session Logged!', description: `Session for ${selectedClient.displayName} has been recorded.` });
+        router.push('/coach/log-session/success');
+      }
     } catch (error) {
-      console.error('[SessionLogForm] Error logging session to Firestore:', error);
+      console.error(`[SessionLogForm] Error during submission (isEditMode: ${isEditMode}):`, error);
       toast({
-        title: 'Logging Failed',
-        description: 'Could not save session to database. Check console for details.',
+        title: isEditMode ? 'Update Failed' : 'Logging Failed',
+        description: `Could not save session. Check console for details.`,
         variant: 'destructive',
       });
     }
@@ -161,8 +171,8 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
   return (
     <Card className="w-full max-w-2xl shadow-light">
       <CardHeader>
-        <CardTitle className="font-headline">Log New Coaching Session</CardTitle>
-        <CardDescription>Fill in the details for your recent coaching session. Logged by: {coachName}</CardDescription>
+        <CardTitle className="font-headline">{isEditMode ? 'Edit Coaching Session' : 'Log New Coaching Session'}</CardTitle>
+        <CardDescription>{isEditMode ? `Updating session for ${session.clientName}` : `Fill in the details for your recent coaching session. Logged by: ${coachName}`}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
@@ -183,7 +193,7 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!firebaseAvailable}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!firebaseAvailable || isEditMode}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a client" />
@@ -226,7 +236,6 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
                   )}
                 />
             </div>
-
 
             <FormField
               control={form.control}
@@ -298,13 +307,20 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Logging...
+                  {isEditMode ? 'Saving...' : 'Logging...'}
                 </>
               ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Log Session
-                </>
+                 isEditMode ? (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                 ) : (
+                  <>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Log Session
+                  </>
+                 )
               )}
             </Button>
           </CardFooter>
