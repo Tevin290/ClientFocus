@@ -20,7 +20,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 const sessionLogSchema = z.object({
-  clientId: z.string().min(1, 'Client ID is required (usually auto-filled or selected)').optional(), // Will make required if not auto-filled
+  clientId: z.string().optional(),
   clientName: z.string().min(1, 'Client Name is required'),
   clientEmail: z.string().email('Invalid email address').min(1, 'Client Email is required'),
   sessionDate: z.string().min(1, "Session date is required"),
