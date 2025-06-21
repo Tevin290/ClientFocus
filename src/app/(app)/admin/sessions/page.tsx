@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getAllSessionsForAdmin, updateSession, type Session } from '@/lib/firestoreService'; // Import real service
 import { useRole } from '@/context/role-context';
 import { isFirebaseConfigured } from '@/lib/firebase';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type SessionStatus = 'Logged' | 'Reviewed' | 'Billed';
 // Session type is already imported from firestoreService
@@ -154,7 +155,7 @@ export default function AdminSessionReviewPage() {
                 <TableRow>
                   <TableHead>Client</TableHead>
                   <TableHead>Coach</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Date & Time</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -165,7 +166,7 @@ export default function AdminSessionReviewPage() {
                   <TableRow key={session.id}>
                     <TableCell className="font-medium">{session.clientName}</TableCell>
                     <TableCell>{session.coachName}</TableCell>
-                    <TableCell>{new Date(session.sessionDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{new Date(session.sessionDate).toLocaleString()}</TableCell>
                     <TableCell>{session.sessionType}</TableCell>
                     <TableCell>{getStatusBadge(session.status as SessionStatus)}</TableCell>
                     <TableCell className="text-right space-x-2">

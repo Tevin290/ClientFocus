@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 const sessionLogSchema = z.object({
   clientId: z.string().min(1, 'Please select a client.'),
   sessionDate: z.string().min(1, "Session date is required"),
+  sessionTime: z.string().min(1, 'Session time is required'),
   videoLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   sessionType: z.enum(['Full', 'Half'], { required_error: 'Session Type is required' }),
   sessionNotes: z.string().min(10, 'Session notes must be at least 10 characters').max(5000, 'Session notes cannot exceed 5000 characters'),
@@ -64,6 +65,7 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
     defaultValues: {
       clientId: prefilledClientId || '',
       sessionDate: new Date().toISOString().split('T')[0],
+      sessionTime: new Date().toTimeString().slice(0, 5),
       videoLink: '',
       sessionType: undefined,
       sessionNotes: '',
@@ -130,7 +132,7 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
       clientId: selectedClient.uid,
       clientName: selectedClient.displayName,
       clientEmail: selectedClient.email,
-      sessionDate: new Date(data.sessionDate),
+      sessionDate: new Date(`${data.sessionDate}T${data.sessionTime}`),
       sessionType: data.sessionType,
       videoLink: data.videoLink,
       sessionNotes: data.sessionNotes,
@@ -199,18 +201,32 @@ export function SessionLogForm({ coachId, coachName, clients }: SessionLogFormPr
                 </FormItem>
               )}
             />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                  control={form.control}
+                  name="sessionDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Session Date</FormLabel>
+                      <FormControl><Input type="date" {...field} disabled={!firebaseAvailable} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              <FormField
+                  control={form.control}
+                  name="sessionTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Session Time</FormLabel>
+                      <FormControl><Input type="time" {...field} disabled={!firebaseAvailable} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+            </div>
 
-            <FormField
-                control={form.control}
-                name="sessionDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Session Date</FormLabel>
-                    <FormControl><Input type="date" {...field} disabled={!firebaseAvailable} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
             <FormField
               control={form.control}

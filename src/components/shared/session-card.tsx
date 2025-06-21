@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export interface Session {
   id: string;
+  clientId?: string;
   clientName?: string; // Optional for client view if they are the client
   coachName?: string; // Optional for coach view if they are the coach
   sessionDate: string;
@@ -23,8 +24,8 @@ interface SessionCardProps {
 }
 
 export function SessionCard({ session, showActions = false, onViewDetails }: SessionCardProps) {
-  const displayDate = new Date(session.sessionDate).toLocaleDateString(undefined, {
-    year: 'numeric', month: 'long', day: 'numeric'
+  const displayDate = new Date(session.sessionDate).toLocaleString(undefined, {
+    year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
   });
 
   return (
