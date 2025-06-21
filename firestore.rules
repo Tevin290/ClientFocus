@@ -3,73 +3,38 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =================================
-    // Helper Functions
-    // =================================
-
-    // Returns true if the requesting user is the owner of the resource.
-    // Use this by passing the UID from the document, e.g., isOwner(resource.data.uid).
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    // Returns true if the requesting user has the 'admin' role in their user profile.
-    // This requires a read of the user's own profile document.
+    // Helper function to securely identify an admin.
     function isAdmin() {
-      // Check if the user is authenticated first.
-      // Then, get their user document from the 'users' collection.
-      // The path is constructed dynamically using the requesting user's UID.
-      // Check if the 'role' field in their document data is 'admin'.
+      // This get() call is the source of truth for admin status.
+      // It checks the user's own document in the 'users' collection.
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // =================================
-    // Users Collection Rules
-    // =================================
-    match /users/{userId} {
-
-      // READ: Any authenticated user can read any other user's profile.
-      // This is necessary for features like an admin fetching a list of all coaches.
-      allow read: if request.auth != null;
-
-      // CREATE: A user can create their own document, OR an admin can create any user document.
-      // This allows both regular signup and admin actions like creating dummy client users.
-      // We check that the data being written has a 'uid' field that matches the document ID.
-      allow create: if (isOwner(userId) && request.resource.data.uid == userId)
-                    || isAdmin();
-
-      // UPDATE: A user can update their own document, OR an admin can update any user document.
-      // A non-admin user is NOT allowed to change their own role.
-      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role)
-                    || isAdmin();
-      
-      // DELETE: Only an admin can delete a user document.
-      allow delete: if isAdmin();
+    // --- Global Admin Rule ---
+    // If the user is an admin, they can do anything to any document.
+    // This rule is checked first for any path and grants universal access.
+    match /{document=**} {
+      allow read, write: if isAdmin();
     }
 
-    // =================================
-    // Sessions Collection Rules
-    // =================================
+    // --- User Collection Rules (for non-admins) ---
+    // These rules only apply if the user is NOT an admin.
+    match /users/{userId} {
+      // Allow a non-admin to create their own user document during signup.
+      allow create: if request.auth.uid == userId;
+
+      // Allow a non-admin to read and update their own user document.
+      allow read, update: if request.auth.uid == userId;
+    }
+    
+    // --- Sessions Collection Rules (for non-admins) ---
+    // These rules only apply if the user is NOT an admin.
     match /sessions/{sessionId} {
-
-      // READ: Any authenticated user can read any session.
-      // This can be tightened later if needed (e.g., only coach/client/admin can read).
-      // For now, this supports admin review, coach dashboard, and client history views.
-      allow read: if request.auth != null;
-
-      // CREATE: The session can be created by the coach assigned to it, OR by an admin.
-      // This covers a coach logging a session and an admin creating dummy data.
-      // Use `request.resource.data` because the document doesn't exist yet.
-      allow create: if (isOwner(request.resource.data.coachId))
-                    || isAdmin();
-
-      // UPDATE: The session can be updated by the coach who owns it, OR by an admin.
-      // Use `resource.data` because the document already exists.
-      allow update: if (isOwner(resource.data.coachId))
-                    || isAdmin();
-
-      // DELETE: Only an admin can delete a session document.
-      allow delete: if isAdmin();
+      // Allow a non-admin (coach or client) to read their own sessions.
+      allow read: if request.auth.uid == resource.data.coachId || request.auth.uid == resource.data.clientId;
+      
+      // Allow a non-admin (specifically a coach) to create or update sessions they are the coach for.
+      allow create, update: if request.auth.uid == request.resource.data.coachId;
     }
   }
 }
