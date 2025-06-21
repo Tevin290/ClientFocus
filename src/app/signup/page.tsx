@@ -120,11 +120,10 @@ export default function SignupPage() {
     }
 
     setIsSigningUp(true);
-    let firebaseUser: FirebaseUser | null = null;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      firebaseUser = userCredential.user;
+      const firebaseUser = userCredential.user;
 
       if (!firebaseUser) {
         throw new Error('User creation in Firebase Auth returned null user object.');
@@ -132,7 +131,8 @@ export default function SignupPage() {
       
       await updateProfile(firebaseUser, { displayName: data.displayName });
       
-      // EXTREME DIAGNOSTIC VERSION: Pass only firebaseUser
+      // The user object is automatically updated, no need to reload
+      // Now create the corresponding profile in Firestore
       await createUserProfileInFirestore(firebaseUser); 
 
       toast({
@@ -142,42 +142,29 @@ export default function SignupPage() {
       router.push('/login');
 
     } catch (error: any) {
-      let errorMessage: string;
-      let errorCode: string;
-      let toastMessage: string;
-
+      console.error("[SignupPage] Sign Up Error:", error);
+      
+      let toastMessage = 'An unexpected error occurred during sign up. Please try again.';
       if (error instanceof RangeError && error.message.includes('Maximum call stack size exceeded')) {
-        errorMessage = 'A "Maximum call stack size exceeded" error occurred internally.';
-        errorCode = 'STACK_OVERFLOW_ERROR';
-        console.error("[SignupPage] Sign Up Error: Maximum call stack size exceeded during signup process.");
-        toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
-      } else {
-        try {
-          errorMessage = String(error?.message || 'Unknown signup error (message retrieval failed).');
-        } catch (e) {
-          errorMessage = 'Unknown signup error (error.message access failed).';
-        }
-
-        try {
-          errorCode = String(error?.code || 'UNKNOWN_ERROR (code retrieval failed).');
-        } catch (e) {
-          errorCode = 'UNKNOWN_ERROR (error.code access failed).';
-        }
-        
-        const logMessage = "[SignupPage] Sign Up Error: " + errorMessage + " Code: " + errorCode;
-        console.error(logMessage);
-        
-        toastMessage = 'Signup failed. Please try again.';
-        if (errorCode === 'auth/email-already-in-use') {
-          toastMessage = 'This email address is already in use.';
-        } else if (errorCode === 'auth/weak-password') {
-          toastMessage = 'The password is too weak.';
-        } else if (errorMessage.includes("PERMISSION_DENIED")) { 
-           toastMessage = "Signup failed due to permissions. Please contact support or check Firestore rules.";
-        } else if (errorMessage.includes("Authentication state error")) {
-          toastMessage = "Signup failed due to an authentication issue. Please try again.";
-        }
+          toastMessage = "Signup failed due to an internal error (Stack Overflow). Please contact support.";
+      } else if (error.code) {
+          switch (error.code) {
+              case 'auth/email-already-in-use':
+                  toastMessage = 'This email address is already in use.';
+                  break;
+              case 'auth/weak-password':
+                  toastMessage = 'The password is too weak.';
+                  break;
+              case 'permission-denied':
+                   toastMessage = "Signup failed due to permissions. Please check Firestore rules and contact support.";
+                   break;
+              default:
+                   toastMessage = `An error occurred: ${error.code}. Please try again.`;
+          }
+      } else if (error.message) {
+        toastMessage = error.message;
       }
+      
       toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
@@ -328,6 +315,3 @@ export default function SignupPage() {
     </div>
   );
 }
-    
-
-    
