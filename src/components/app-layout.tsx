@@ -71,7 +71,7 @@ const navItems: NavItem[] = [
   { href: '/coach/my-sessions', label: 'My Sessions', icon: History, roles: ['coach'] },
   { href: '/coach/my-clients', label: 'My Clients', icon: Users, roles: ['coach'] },
 
-  { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: true }, // Keep disabled
+  { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: false },
   { href: '/client/history', label: 'Session History', icon: History, roles: ['client'], disabled: false },
   { href: '/client/profile', label: 'My Profile', icon: UserCircle, roles: ['client'], disabled: true }, // Keep disabled
 ];
