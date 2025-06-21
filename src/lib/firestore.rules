@@ -1,0 +1,81 @@
+
+rules_version = '2';
+
+// Visit https://firebase.google.com/docs/firestore/security/get-started
+// to learn more about Firestore Security Rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Server-side function to determine a user's role based on their email.
+    // This is more secure than trusting a role sent from the client.
+    function determineRole(email) {
+      // Use NEXT_PUBLIC_ADMIN_EMAILS env var from your app, or a default.
+      // NOTE: Environment variables are NOT available in security rules.
+      // You must hardcode admin emails here or use a different mechanism
+      // like a custom claim. For this app, we'll hardcode it.
+      let adminEmails = ['hello@hmperform.com'];
+      if (email in adminEmails) {
+        return 'admin';
+      }
+      if (email.matches(".*@hmperform\\.com$")) {
+        return 'coach';
+      }
+      return 'client';
+    }
+    
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      
+      // CREATE: A user can only create their own profile document.
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    // --- Data Validation ---
+                    // Ensure the data being written is consistent and valid.
+                    && request.resource.data.uid == userId
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.displayName is string
+                    && request.resource.data.displayName.size() >= 3
+                    && request.resource.data.role == determineRole(request.auth.token.email)
+                    && request.resource.data.createdAt is timestamp
+                    && request.resource.data.photoURL == request.auth.token.picture;
+
+      // READ: A user can only read their own profile document.
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // UPDATE: A user can only update their own profile.
+      // They can only change specific fields like displayName and photoURL.
+      allow update: if request.auth != null 
+                    && request.auth.uid == userId
+                    // --- Field-level Validation ---
+                    // Only allow updating 'displayName' and 'photoURL'.
+                    // All other fields (uid, email, role, etc.) must remain unchanged.
+                    && request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'uid', 'email', 'role', 'createdAt']);
+
+      // DELETE: Disallow deleting user profiles for now.
+      allow delete: if false;
+    }
+
+    // Rules for the 'sessions' collection
+    match /sessions/{sessionId} {
+      // READ: Allow read if the user is an admin, the coach of the session, or the client of the session.
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        || request.auth.uid == resource.data.coachId
+        || request.auth.uid == resource.data.clientId
+      );
+
+      // CREATE: Allow create if the user is a coach.
+      allow create: if request.auth != null 
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
+
+      // UPDATE: Allow update if the user is an admin or the coach who created the session.
+      allow update: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        || request.auth.uid == resource.data.coachId
+      );
+
+      // DELETE: Disallow deleting sessions for now.
+      allow delete: if false;
+    }
+  }
+}

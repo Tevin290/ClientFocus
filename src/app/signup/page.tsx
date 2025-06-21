@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/form';
 import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn } from 'lucide-react';
 
-import { createUserWithEmailAndPassword, updateProfile, type User as FirebaseUser } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -127,10 +127,6 @@ export default function SignupPage() {
       // 1. Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
-
-      if (!firebaseUser) {
-        throw new Error('User creation in Firebase Auth returned null user object.');
-      }
       
       // 2. Update the user's display name in their Auth profile
       await updateProfile(firebaseUser, { displayName: data.displayName });
@@ -139,6 +135,7 @@ export default function SignupPage() {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const role = determineRole(firebaseUser.email);
       
+      // This data object is carefully constructed to pass the new, stricter security rules.
       const userProfileData = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
