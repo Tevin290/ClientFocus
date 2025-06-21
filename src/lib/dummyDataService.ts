@@ -17,6 +17,8 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
   if (!db) {
     throw new Error("Firestore DB is not initialized. This can happen if Firebase configuration is missing or incorrect.");
   }
+  
+  console.log(`[DummyData] Starting generation for coach: ${coach.coachName} (${coach.coachId})`);
 
   const batch = writeBatch(db);
   let clientsCreated = 0;
@@ -55,6 +57,9 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
     clientsCreated++;
     createdClients.push({ id: newClientRef.id, name: client.displayName, email: client.email });
   }
+  
+  console.log(`[DummyData] Staged ${clientsCreated} new client documents for creation.`);
+
 
   // 2. Create a few dummy sessions for these new clients
   const sessionsCollectionRef = collection(db, 'sessions');
@@ -107,9 +112,13 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
     batch.set(newSessionRef, sessionData);
     sessionsCreated++;
   }
+  
+  console.log(`[DummyData] Staged ${sessionsCreated} new session documents for creation.`);
+  console.log("[DummyData] Attempting to commit batch write to Firestore...");
+
 
   await batch.commit();
 
-  console.log(`Successfully created ${clientsCreated} clients and ${sessionsCreated} sessions for coach ${coach.coachName}.`);
+  console.log(`[DummyData] Batch commit successful. Created ${clientsCreated} clients and ${sessionsCreated} sessions for coach ${coach.coachName}.`);
   return { clientsCreated, sessionsCreated };
 }

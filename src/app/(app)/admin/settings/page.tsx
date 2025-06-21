@@ -82,11 +82,22 @@ export default function AdminSettingsPage() {
         duration: 7000,
       });
     } catch (error: any) {
-      console.error("Error generating dummy data:", error);
+      // Log the full error object to the console for detailed inspection
+      console.error("Detailed error during dummy data generation:", error);
+      
+      // Create a more informative description for the user toast
+      let description = "An unexpected error occurred. Check the browser console for details.";
+      if (error.code === 'permission-denied') {
+        description = "Permission denied. Please ensure your Firestore security rules allow admins to create users and sessions. Check the console for the exact failed operation.";
+      } else if (error.message) {
+        description = error.message;
+      }
+      
       toast({
         title: "Dummy Data Generation Failed",
-        description: error.message || "An unexpected error occurred.",
+        description: description,
         variant: "destructive",
+        duration: 9000, // Increase duration to allow reading
       });
     } finally {
       setIsGenerating(false);
