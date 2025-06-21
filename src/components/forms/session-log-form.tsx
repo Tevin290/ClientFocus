@@ -130,9 +130,9 @@ export function SessionLogForm({ coachId, coachName }: SessionLogFormProps) {
       clientEmail: data.clientEmail,
       sessionDate: new Date(data.sessionDate),
       sessionType: data.sessionType,
-      videoLink: data.videoLink || undefined,
+      videoLink: data.videoLink,
       sessionNotes: data.sessionNotes,
-      summary: data.summary || undefined,
+      summary: data.summary,
       status: 'Logged',
     };
 
