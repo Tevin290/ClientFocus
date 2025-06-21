@@ -51,12 +51,7 @@ export default function LoginPage() {
     }
   }, [toast]);
 
-  useEffect(() => {
-    // If user is authenticated and role is determined, redirect to their dashboard
-    if (!isRoleLoading && user && role) {
-      router.push(`/${role}/dashboard`);
-    }
-  }, [user, role, isRoleLoading, router]);
+  // Redirection logic is now centralized in RoleContext
 
   const handleLogin: SubmitHandler<LoginFormValues> = async (data) => {
     if (firebaseNotConfigured) {
@@ -72,8 +67,6 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       // RoleContext will handle fetching profile and redirecting based on role
-      // Toast for success will be implicitly handled by RoleContext redirection or a general app welcome
-      // For now, let's keep a simple toast here, but ideally RoleContext success triggers a more global welcome.
       toast({ title: 'Login Successful', description: `Welcome back!` });
     } catch (error: any) {
       console.error('Firebase Login Error:', error);
@@ -89,7 +82,7 @@ export default function LoginPage() {
     }
   };
 
-  // If role context is loading OR user is already authenticated and role is known, show loading or let useEffect redirect.
+  // Show a loading spinner if the role context is loading or if the user is logged in but we are waiting for the redirect from RoleContext to happen.
   if (isRoleLoading || (user && role)) {
     return <div className="flex items-center justify-center min-h-screen bg-background"><Loader2 className="h-10 w-10 animate-spin text-primary" /> <p className="ml-3 text-lg">Loading...</p></div>;
   }
