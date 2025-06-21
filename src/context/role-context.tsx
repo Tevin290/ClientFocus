@@ -88,10 +88,14 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
     // Case 1: User is authenticated and has a role
     if (user && role) {
       if (isAuthPage) {
-        let dashboardPath = `/${role}/dashboard`;
-        if (role === 'super-admin') {
-            dashboardPath = '/admin/dashboard';
+        let dashboardPath = '';
+        if (role === 'admin' || role === 'super-admin') {
+          dashboardPath = '/admin/dashboard';
+        } else {
+          // This covers 'coach' and 'client'
+          dashboardPath = `/${role}/dashboard`;
         }
+        
         console.log(`[RoleContext] User is on auth page. Redirecting to ${dashboardPath}...`);
         router.replace(dashboardPath);
       }
