@@ -42,7 +42,8 @@ import {
   LifeBuoy,
   CreditCard,
   History,
-  FileText
+  FileText,
+  Briefcase
 } from 'lucide-react';
 import { useRole, type UserRole } from '@/context/role-context';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -60,6 +61,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard, roles: ['admin', 'super-admin'] },
   { href: '/admin/sessions', label: 'Session Review', icon: ClipboardList, roles: ['admin', 'super-admin'] },
+  { href: '/admin/coaches', label: 'Coaches', icon: Briefcase, roles: ['admin', 'super-admin'] },
   { href: '/admin/billing', label: 'Billing', icon: CreditCard, roles: ['admin', 'super-admin'] },
   { href: '/admin/users', label: 'User Management', icon: Users, roles: ['admin', 'super-admin'], disabled: true },
   { href: '/admin/settings', label: 'Settings', icon: Settings, roles: ['admin', 'super-admin'] },
@@ -124,7 +126,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   let userDisplayName = 'SessionSync User';
   let userEmailLine: string = 'No Role';
 
-  if (userProfile) {
+  if (isRoleLoading) {
+     // Render skeletons or a simplified header during loading
+  } else if (userProfile) {
       if (userProfile.displayName) {
           avatarFallback = userProfile.displayName.charAt(0).toUpperCase();
           avatarAltText = userProfile.displayName;
@@ -134,7 +138,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           userEmailLine = userProfile.email;
       }
   } else if (role) {
-      // Fallback to role info if profile is not yet available
+      // Fallback to role info if profile is not yet available but role is known
       avatarFallback = role.charAt(0).toUpperCase();
       avatarAltText = role;
       userEmailLine = `${role.replace('-', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Account`;

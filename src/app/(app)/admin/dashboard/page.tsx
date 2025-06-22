@@ -2,9 +2,11 @@
 
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Users, DollarSign, Activity } from "lucide-react";
+import { BarChart, Users, DollarSign, Activity, Briefcase } from "lucide-react";
 import { ResponsiveContainer, BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const chartData = [
   { month: "Jan", sessions: 18, revenue: 1200 },
@@ -102,13 +104,23 @@ export default function AdminDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Placeholder for recent activity or session review quick links */}
+      {/* Link to Coach Management Page */}
       <Card className="mt-8 shadow-light">
         <CardHeader>
-          <CardTitle className="font-headline">Recent Activity</CardTitle>
+          <CardTitle className="font-headline flex items-center">
+            <Briefcase className="mr-2 h-6 w-6 text-primary" />
+            Coach Management
+          </CardTitle>
+          <CardDescription>
+            View all registered coaches, their assigned clients, and session statistics.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">Recent session logs and billing requests will appear here...</p>
+          <Button asChild>
+            <Link href="/admin/coaches">
+              View All Coaches
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

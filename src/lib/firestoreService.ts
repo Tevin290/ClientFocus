@@ -340,3 +340,29 @@ export async function getCoachClients(coachId: string): Promise<UserProfile[]> {
     throw new Error(`Failed to fetch clients for coach ID ${coachId}. See server logs for details.`);
   }
 }
+
+export async function getAllSessions(): Promise<Session[]> {
+  ensureFirebaseIsOperational();
+  try {
+    const sessionsCol = collection(db, 'sessions');
+    const q = query(sessionsCol, orderBy('sessionDate', 'desc'));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return [];
+    }
+    return snapshot.docs.map(docData => {
+      const data = docData.data();
+      return {
+        id: docData.id,
+        ...data,
+        sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
+      } as Session;
+    });
+  } catch (error: any) {
+    console.error(`Detailed Firebase Error in getAllSessions:`, error);
+    if (error.code === 'failed-precondition') {
+      throw new Error(`Failed to fetch all sessions. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
+    }
+    throw new Error(`Failed to fetch all sessions. See server logs for details.`);
+  }
+}
