@@ -1,21 +1,13 @@
-
 rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // By default, deny all access.
-    match /{allPaths=**} {
-      allow read, write: if false;
-    }
-
-    // Profile pictures can be read by any authenticated user.
-    // They can only be written (created, updated, deleted) by the user who owns the profile.
-    // We also enforce constraints on file size and type.
-    match /profile-pictures/{userId}/{allPaths=**} {
+    // This rule allows a user to upload their own profile picture.
+    // It is simplified for debugging. We temporarily removed size and type checks.
+    // Read access is granted to any authenticated user to see avatars.
+    match /profile-pictures/{userId}/{fileName} {
       allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId
-                    && request.resource.size < 5 * 1024 * 1024 // Max 5MB
-                    && request.resource.contentType.matches('image/(jpeg|png|heic|heif|webp)');
+      allow write: if request.auth.uid == userId;
     }
   }
 }

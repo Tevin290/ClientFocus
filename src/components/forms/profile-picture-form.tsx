@@ -13,6 +13,7 @@ import { updateUserProfile } from '@/lib/firestoreService';
 import { updateProfile } from 'firebase/auth';
 import type { UserProfile } from '@/lib/firestoreService';
 import { cn } from '@/lib/utils';
+import { FormDescription, FormLabel, FormMessage } from '../ui/form';
 
 interface ProfilePictureFormProps {
   user: { uid: string; email: string | null; displayName: string | null; };
@@ -34,14 +35,12 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    // Reset the input value to allow re-selecting the same file
     if (event.target) {
       event.target.value = '';
     }
 
     if (!file) return;
 
-    // --- Start Validation ---
     console.log(`[ProfileUpload] Validating file: ${file.name}, size: ${file.size}, type: ${file.type}`);
     if (file.size > MAX_FILE_SIZE_BYTES) {
       const errorMsg = `File is too large. Max size is ${MAX_FILE_SIZE_MB}MB.`;
@@ -58,13 +57,21 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
       toast({ title: "Invalid File", description: errorMsg, variant: "destructive" });
       return;
     }
-    // --- End Validation ---
 
     console.log("[ProfileUpload] File validation successful.");
     setError(null);
     setSelectedFile(file);
     setPreview(URL.createObjectURL(file));
   };
+
+  const onInvalid = (errors: any) => {
+    console.error('[ProfileUpload] Form validation failed:', errors);
+    toast({
+      title: 'Invalid File',
+      description: 'The selected file could not be uploaded. Please check the file type and size.',
+      variant: 'destructive',
+    });
+  }
 
   const handleUpload = async () => {
     if (!selectedFile) {
@@ -79,6 +86,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
     setIsUploading(true);
     let success = false;
     console.log(`[ProfileUpload] Starting upload for user ${user.uid}, file: ${selectedFile.name}`);
+    console.log(`[ProfileUpload] File details - Size: ${selectedFile.size}, Type: ${selectedFile.type}`);
 
     try {
       const storageRef = ref(storage, `profile-pictures/${user.uid}/${selectedFile.name}`);
@@ -104,7 +112,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
         title: 'Profile Picture Updated',
         description: 'Your new profile picture has been saved.',
       });
-      setSelectedFile(null); // Clear the selected file after successful upload
+      setSelectedFile(null); 
       success = true;
 
     } catch (error: any) {
