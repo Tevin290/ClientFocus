@@ -33,7 +33,6 @@ import {
   Users,
   Settings,
   ClipboardList,
-  UserCircle,
   BarChart3,
   LogOut,
   LayoutDashboard,
@@ -116,8 +115,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   };
 
   const filteredNavItems = navItems.filter(item => {
-    return item.roles.includes(role) && !item.disabled;
+    return role && item.roles.includes(role) && !item.disabled;
   });
+
+  const getAvatarFallback = () => {
+    if (userProfile?.displayName) return userProfile.displayName.charAt(0);
+    if (role) return role.charAt(0).toUpperCase();
+    return 'U';
+  };
 
 
   if (isRoleLoading) {
@@ -142,7 +147,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success')) {
+  if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success') && pathname !== '/signup') {
     return null; // Let RoleContext handle the redirect
   }
 
@@ -217,10 +222,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                   <Avatar className="h-9 w-9">
                     <AvatarImage 
-                      src={userProfile?.photoURL || `https://placehold.co/100x100.png?text=${userProfile?.displayName?.charAt(0) || role?.charAt(0).toUpperCase() || 'U'}`} 
+                      src={userProfile?.photoURL || `https://placehold.co/100x100.png?text=${getAvatarFallback()}`} 
                       alt={userProfile?.displayName || role || 'User'} 
                       data-ai-hint="user avatar" />
-                    <AvatarFallback>{userProfile?.displayName?.charAt(0) || role?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
+                    <AvatarFallback>{getAvatarFallback()}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
