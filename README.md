@@ -163,5 +163,30 @@ npm run genkit:dev
 npm run genkit:watch
 ```
 Ensure your Google AI API keys are set up if using Google AI models with Genkit. Refer to Genkit documentation for configuration.
-```
+
+## Future Plans: Evolving to a Multi-Tenant SaaS Platform
+
+The current application is designed for a single organization. However, it is entirely feasible to evolve this project into a multi-tenant Software-as-a-Service (SaaS) platform where multiple companies can use SessionSync independently and securely.
+
+### Recommended Approach
+
+The recommended path is to first perfect the feature set and user experience for the single-tenant version. Once the core product is stable and validated, the architectural shift to multi-tenancy can begin. The trigger for this work would ideally be a second company expressing interest in using the platform.
+
+### Architectural Changes Required
+
+Transforming the app into a multi-tenant SaaS would involve three main areas of work:
+
+1.  **Firestore Data Model Rework (Medium Difficulty):**
+    *   **Introduce a `companies` Collection:** A new top-level collection where each document represents a paying customer company. This document would store company-specific settings, including their Stripe Connect ID.
+    *   **Add `companyId` to all data:** Every document in collections like `users` and `sessions` would need a `companyId` field to link it to the appropriate company, ensuring data is never mixed.
+
+2.  **Security Rules Overhaul (High Difficulty):**
+    *   This is the most critical change. The `firestore.rules` would need a complete rewrite.
+    *   Rules would shift from being user-centric to tenant-centric. Every data access request would be required to verify that the user's `companyId` matches the `companyId` on the document they are trying to access, thus creating a secure wall between each company's data.
+
+3.  **Stripe Integration with Stripe Connect (Medium Difficulty):**
+    *   Instead of storing API keys, the platform would use **Stripe Connect**.
+    *   **Onboarding:** Company admins would securely connect their own Stripe accounts to the platform during onboarding. SessionSync would only store a safe, non-sensitive connection ID (`acct_...`).
+    *   **Billing:** When an admin bills a client, the API call would be made *on behalf of* the connected company account. This ensures that payments flow directly from the client to the company's Stripe account, with the platform optionally taking a service fee from the transaction.
+
 This README provides a basic setup guide. You can expand it with more details about your project architecture, specific component usage, and contribution guidelines.
