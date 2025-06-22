@@ -22,6 +22,7 @@ Streamline your coaching sessions and client management with SessionSync. This N
 - Firebase Project:
     - Set up Firebase Authentication (Email/Password provider enabled).
     - Set up Firestore database.
+    - Set up Firebase Storage.
     - Obtain your Firebase project configuration credentials.
 
 ### Environment Configuration
@@ -55,13 +56,20 @@ Streamline your coaching sessions and client management with SessionSync. This N
     NEXT_PUBLIC_ADMIN_EMAILS=hello@hmperform.com 
     ```
 
-2.  **Firestore Security Rules:**
-    Deploy the security rules located in `firestore.rules` to your Firebase project. These rules are crucial for controlling access to your data.
+2.  **Security Rules (Firestore & Storage):**
+    Deploy the security rules located in `firestore.rules` and `storage.rules` to your Firebase project. These rules are crucial for controlling access to your data and enabling file uploads.
     Use the Firebase CLI:
     ```bash
+    # Deploy both Firestore and Storage rules
+    firebase deploy --only firestore,storage
+    ```
+    Alternatively, you can deploy them individually:
+    ```bash
     firebase deploy --only firestore:rules
+    firebase deploy --only storage
     ```
     Ensure you are logged into the Firebase CLI (`firebase login`) and have selected the correct project (`firebase use YOUR_PROJECT_ID`).
+
 
 ### Installation
 
@@ -133,9 +141,9 @@ After deploying the updated code and Firestore rules:
 
 ## Deployment
 
-1.  **Deploy Firestore Rules:**
+1.  **Deploy Firestore & Storage Rules:**
     ```bash
-    firebase deploy --only firestore:rules
+    firebase deploy --only firestore,storage
     ```
 
 2.  **Deploy Frontend Application:**

@@ -60,17 +60,27 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
     if (!file || !user?.uid) return;
 
     setIsUploading(true);
+    console.log(`[ProfileUpload] Starting upload for user ${user.uid}, file: ${file.name}, size: ${file.size} bytes`);
     let success = false;
     try {
       const storageRef = ref(storage, `profile-pictures/${user.uid}/${file.name}`);
+      console.log("[ProfileUpload] Storage reference created:", storageRef.fullPath);
+      
       const uploadResult = await uploadBytes(storageRef, file);
+      console.log("[ProfileUpload] Upload successful!", uploadResult);
+      
       const downloadURL = await getDownloadURL(uploadResult.ref);
+      console.log("[ProfileUpload] Got download URL:", downloadURL);
 
       if (auth.currentUser) {
+        console.log("[ProfileUpload] Updating Firebase Auth profile...");
         await updateProfile(auth.currentUser, { photoURL: downloadURL });
+        console.log("[ProfileUpload] Firebase Auth profile updated.");
       }
 
+      console.log("[ProfileUpload] Updating Firestore user profile...");
       await updateUserProfile(user.uid, { photoURL: downloadURL });
+      console.log("[ProfileUpload] Firestore user profile updated.");
       
       toast({
         title: 'Profile Picture Updated',
@@ -81,14 +91,15 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
       success = true;
 
     } catch (error: any) {
-      console.error("Error uploading profile picture:", error);
+      console.error("[ProfileUpload] Full error object:", error);
       toast({
         title: 'Upload Failed',
-        description: error.message || 'Could not upload your profile picture. Please try again.',
+        description: error.message || 'Could not upload profile picture. Check console for details.',
         variant: 'destructive',
       });
     } finally {
       setIsUploading(false);
+      console.log(`[ProfileUpload] Upload process finished. Success: ${success}`);
       if (success) {
         await refetchUserProfile();
       }
