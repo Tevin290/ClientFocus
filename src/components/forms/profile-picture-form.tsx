@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, Upload, UserCircle } from 'lucide-react';
@@ -109,7 +109,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
           <CardContent className="space-y-4">
             <div className="flex items-center gap-6">
                 <Avatar className="h-24 w-24 border-4 border-primary/50">
-                    <AvatarImage src={preview || userProfile.photoURL || undefined} alt={userProfile.displayName} data-ai-hint="avatar person" />
+                    <AvatarImage src={preview || userProfile.photoURL || undefined} alt={userProfile.displayName || ''} data-ai-hint="avatar person" />
                     <AvatarFallback className="text-3xl">{avatarPlaceholder}</AvatarFallback>
                 </Avatar>
                 <div className="w-full">
