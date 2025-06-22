@@ -43,7 +43,7 @@ import {
   LifeBuoy,
   CreditCard,
   History,
-  FileText,
+  FileText
 } from 'lucide-react';
 import { useRole, type UserRole } from '@/context/role-context';
 import { Skeleton } from '@/components/ui/skeleton';
