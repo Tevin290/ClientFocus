@@ -1,58 +1,167 @@
+
 'use client';
 
+import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Users, DollarSign, Activity, Briefcase } from "lucide-react";
-import { ResponsiveContainer, BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
+import { BarChart, Users, Activity, Briefcase, Loader2, TriangleAlert } from "lucide-react";
+import { BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar, ResponsiveContainer } from 'recharts';
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getAllCoaches, getAllSessions, type UserProfile, type Session } from '@/lib/firestoreService';
+import { useRole } from '@/context/role-context';
+import { useToast } from '@/hooks/use-toast';
+import { isFirebaseConfigured } from '@/lib/firebase';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, getMonth } from 'date-fns';
 
-const chartData = [
-  { month: "Jan", sessions: 18, revenue: 1200 },
-  { month: "Feb", sessions: 25, revenue: 1800 },
-  { month: "Mar", sessions: 30, revenue: 2200 },
-  { month: "Apr", sessions: 22, revenue: 1500 },
-  { month: "May", sessions: 35, revenue: 2800 },
-  { month: "Jun", sessions: 40, revenue: 3200 },
-];
 
 const chartConfig = {
   sessions: {
     label: "Sessions",
     color: "hsl(var(--primary))",
   },
-  revenue: {
-    label: "Revenue",
-    color: "hsl(var(--accent))",
-  },
 } satisfies ChartConfig;
 
 
 export default function AdminDashboardPage() {
+  const { role, isLoading: isRoleLoading } = useRole();
+  const [coaches, setCoaches] = useState<UserProfile[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedCoachId, setSelectedCoachId] = useState<string>('all');
+  const { toast } = useToast();
+  const firebaseAvailable = isFirebaseConfigured();
+
+  useEffect(() => {
+    if (isRoleLoading || !firebaseAvailable) {
+      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+      return;
+    }
+
+    if (role === 'admin' || role === 'super-admin') {
+      const fetchData = async () => {
+        setIsLoading(true);
+        try {
+          const [fetchedCoaches, fetchedSessions] = await Promise.all([
+            getAllCoaches(),
+            getAllSessions()
+          ]);
+          setCoaches(fetchedCoaches);
+          setSessions(fetchedSessions);
+        } catch (error: any) {
+          console.error("Failed to fetch admin dashboard data:", error);
+          toast({ title: "Error", description: error.message || "Could not load dashboard data.", variant: "destructive" });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [role, isRoleLoading, toast, firebaseAvailable]);
+  
+
+  const metrics = useMemo(() => {
+    const now = new Date();
+    const startOfThisMonth = startOfMonth(now);
+    const endOfThisMonth = endOfMonth(now);
+    const startOfLastMonth = startOfMonth(subMonths(now, 1));
+    const endOfLastMonth = endOfMonth(subMonths(now, 1));
+    const thirtyDaysAgo = subMonths(now, 1);
+
+    const sessionsThisMonth = sessions.filter(s => isWithinInterval(new Date(s.sessionDate), { start: startOfThisMonth, end: endOfThisMonth })).length;
+    const sessionsLastMonth = sessions.filter(s => isWithinInterval(new Date(s.sessionDate), { start: startOfLastMonth, end: endOfLastMonth })).length;
+
+    let percentageChange = 0;
+    if (sessionsLastMonth > 0) {
+      percentageChange = Math.round(((sessionsThisMonth - sessionsLastMonth) / sessionsLastMonth) * 100);
+    } else if (sessionsThisMonth > 0) {
+      percentageChange = 100;
+    }
+    
+    const activeCoachIds = new Set(
+        sessions
+            .filter(s => new Date(s.sessionDate) >= thirtyDaysAgo)
+            .map(s => s.coachId)
+    );
+
+    const pendingReviews = sessions.filter(s => s.status === 'Under Review').length;
+
+    return {
+      sessionsThisMonth,
+      percentageChange,
+      activeCoaches: activeCoachIds.size,
+      pendingReviews,
+    };
+  }, [sessions]);
+
+
+  const monthlyChartData = useMemo(() => {
+    const filteredSessions = selectedCoachId === 'all' 
+      ? sessions 
+      : sessions.filter(s => s.coachId === selectedCoachId);
+      
+    const monthlyTotals = Array(12).fill(0).map((_, i) => ({
+      month: format(new Date(2000, i), 'MMM'),
+      sessions: 0
+    }));
+
+    filteredSessions.forEach(session => {
+        const monthIndex = getMonth(new Date(session.sessionDate));
+        monthlyTotals[monthIndex].sessions++;
+    });
+
+    return monthlyTotals;
+  }, [sessions, selectedCoachId]);
+  
+  const percentageChangeText = metrics.percentageChange >= 0 
+      ? `+${metrics.percentageChange}% from last month`
+      : `${metrics.percentageChange}% from last month`;
+
+  if (isLoading || isRoleLoading) {
+    return (
+        <div className="flex justify-center items-center h-screen">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+    )
+  }
+
+  if (role !== 'admin' && role !== 'super-admin') {
+     return (
+        <div>
+            <PageHeader title="Admin Dashboard" />
+            <Alert variant="destructive">
+                <TriangleAlert className="h-4 w-4" />
+                <AlertTitle>Access Denied</AlertTitle>
+                <AlertDescription>You must be an admin to view this page.</AlertDescription>
+            </Alert>
+        </div>
+     );
+  }
+
   return (
     <div>
       <PageHeader title="Admin Dashboard" description="Overview of platform activity and key metrics." />
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
         <Card className="shadow-light">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase">Total Revenue</CardTitle>
-            <DollarSign className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-headline">$12,700</div>
-            <p className="text-xs text-muted-foreground">+15% from last month</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-light">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase">Total Sessions</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase">Sessions This Month</CardTitle>
             <BarChart className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-headline">152</div>
-            <p className="text-xs text-muted-foreground">+80 since last month</p>
+            <div className="text-2xl font-bold font-headline">{metrics.sessionsThisMonth}</div>
+            <p className="text-xs text-muted-foreground">{percentageChangeText}</p>
           </CardContent>
         </Card>
         <Card className="shadow-light">
@@ -61,8 +170,8 @@ export default function AdminDashboardPage() {
             <Users className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-headline">12</div>
-            <p className="text-xs text-muted-foreground">+2 new this month</p>
+            <div className="text-2xl font-bold font-headline">{metrics.activeCoaches}</div>
+            <p className="text-xs text-muted-foreground">Logged a session in last 30 days</p>
           </CardContent>
         </Card>
         <Card className="shadow-light">
@@ -71,23 +180,39 @@ export default function AdminDashboardPage() {
             <Activity className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-headline">8</div>
-            <p className="text-xs text-muted-foreground">Needs attention</p>
+            <div className="text-2xl font-bold font-headline">{metrics.pendingReviews}</div>
+             <p className="text-xs text-muted-foreground">Sessions needing approval</p>
           </CardContent>
         </Card>
       </div>
 
       <Card className="shadow-light">
         <CardHeader>
-          <CardTitle className="font-headline">Sessions & Revenue Overview</CardTitle>
-          <CardDescription>Monthly trend of logged sessions and estimated revenue.</CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="font-headline">Monthly Session Overview</CardTitle>
+                <CardDescription>Number of sessions logged each month.</CardDescription>
+              </div>
+              <Select value={selectedCoachId} onValueChange={setSelectedCoachId}>
+                <SelectTrigger className="w-full sm:w-[250px]">
+                  <SelectValue placeholder="Filter by coach..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Coaches</SelectItem>
+                  {coaches.map(coach => (
+                    <SelectItem key={coach.uid} value={coach.uid}>
+                      {coach.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+          </div>
         </CardHeader>
         <CardContent className="h-[400px] p-0">
           <ChartContainer config={chartConfig} className="w-full h-full">
-            <RechartsBarChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+            <RechartsBarChart data={monthlyChartData} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
               <XAxis dataKey="month" stroke="hsl(var(--foreground))" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis yAxisId="left" stroke="hsl(var(--foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
-              <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+              <YAxis allowDecimals={false} stroke="hsl(var(--foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
               <Tooltip
                 contentStyle={{ 
                   backgroundColor: 'hsl(var(--card))', 
@@ -97,8 +222,7 @@ export default function AdminDashboardPage() {
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold' }}
               />
               <Legend wrapperStyle={{paddingTop: '20px'}} />
-              <Bar yAxisId="left" dataKey="sessions" fill="var(--color-sessions)" radius={[4, 4, 0, 0]} />
-              <Bar yAxisId="right" dataKey="revenue" fill="var(--color-revenue)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sessions" fill="var(--color-sessions)" radius={[4, 4, 0, 0]} />
             </RechartsBarChart>
           </ChartContainer>
         </CardContent>
