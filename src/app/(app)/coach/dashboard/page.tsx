@@ -15,6 +15,7 @@ import { getCoachSessions, type Session } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 
 const chartConfig: ChartConfig = {
@@ -118,10 +119,6 @@ export default function CoachDashboardPage() {
     return months;
   }, [sessions]);
 
-  const percentageChangeText = metrics.percentageChange >= 0 
-      ? `+${metrics.percentageChange}% from last month`
-      : `${metrics.percentageChange}% from last month`;
-
   if (isLoading || isRoleLoading) {
     return (
         <div className="flex justify-center items-center h-screen">
@@ -154,8 +151,13 @@ export default function CoachDashboardPage() {
             <BarChartIcon className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-headline">{metrics.sessionsThisMonth}</div>
-            <p className="text-xs text-muted-foreground">{percentageChangeText}</p>
+            <div className="text-4xl font-bold font-headline">{metrics.sessionsThisMonth}</div>
+            <p className={cn(
+                "text-sm font-medium",
+                metrics.percentageChange >= 0 ? "text-success" : "text-destructive"
+            )}>
+                {metrics.percentageChange >= 0 ? '+' : ''}{metrics.percentageChange}% from last month
+            </p>
           </CardContent>
         </Card>
 
