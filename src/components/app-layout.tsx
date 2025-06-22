@@ -118,12 +118,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return role && item.roles.includes(role) && !item.disabled;
   });
 
-  const getAvatarFallback = () => {
-    if (userProfile?.displayName) return userProfile.displayName.charAt(0);
-    if (role) return role.charAt(0).toUpperCase();
-    return 'U';
-  };
+  // --- Defensive User Display Logic ---
+  let avatarFallback = 'U';
+  let avatarAltText = 'User';
+  let userDisplayName = 'SessionSync User';
+  let userEmailLine: string = 'No Role';
 
+  if (userProfile) {
+      if (userProfile.displayName) {
+          avatarFallback = userProfile.displayName.charAt(0).toUpperCase();
+          avatarAltText = userProfile.displayName;
+          userDisplayName = userProfile.displayName;
+      }
+      if (userProfile.email) {
+          userEmailLine = userProfile.email;
+      }
+  } else if (role) {
+      // Fallback to role info if profile is not yet available
+      avatarFallback = role.charAt(0).toUpperCase();
+      avatarAltText = role;
+      userEmailLine = `${role.replace('-', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Account`;
+  }
+  // --- End Defensive Logic ---
 
   if (isRoleLoading) {
     return (
@@ -222,19 +238,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                   <Avatar className="h-9 w-9">
                     <AvatarImage 
-                      src={userProfile?.photoURL || `https://placehold.co/100x100.png?text=${getAvatarFallback()}`} 
-                      alt={userProfile?.displayName || role || 'User'} 
+                      src={userProfile?.photoURL || `https://placehold.co/100x100.png?text=${avatarFallback}`} 
+                      alt={avatarAltText}
                       data-ai-hint="user avatar" />
-                    <AvatarFallback>{getAvatarFallback()}</AvatarFallback>
+                    <AvatarFallback>{avatarFallback}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none font-headline">{userProfile?.displayName || 'SessionSync User'}</p>
+                    <p className="text-sm font-medium leading-none font-headline">{userDisplayName}</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                       {userProfile?.email || (role ? `${role.replace('-', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Account` : 'No Role')}
+                       {userEmailLine}
                     </p>
                   </div>
                 </DropdownMenuLabel>
