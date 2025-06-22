@@ -153,9 +153,9 @@ export default function AdminCoachesPage() {
                   {/* Placeholder for more stats */}
                 </CardContent>
                 <CardFooter>
-                  <Button asChild className="w-full" variant="outline" disabled>
-                    <Link href={`#`}>
-                      <Eye className="mr-2 h-4 w-4" /> View Details (Soon)
+                  <Button asChild className="w-full" variant="outline">
+                    <Link href={`/admin/coaches/${coach.uid}`}>
+                      <Eye className="mr-2 h-4 w-4" /> View Details
                     </Link>
                   </Button>
                 </CardFooter>
