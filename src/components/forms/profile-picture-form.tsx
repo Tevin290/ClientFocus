@@ -51,7 +51,6 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
     const file = event.target.files?.[0];
     if (file) {
       setPreview(URL.createObjectURL(file));
-      // Use `setValue` to programmatically update the form state for the file input
       form.setValue('profileImage', event.target.files as FileList, { shouldValidate: true });
     }
   };
@@ -61,6 +60,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
     if (!file || !user?.uid) return;
 
     setIsUploading(true);
+    let success = false;
     try {
       const storageRef = ref(storage, `profile-pictures/${user.uid}/${file.name}`);
       const uploadResult = await uploadBytes(storageRef, file);
@@ -72,14 +72,13 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
 
       await updateUserProfile(user.uid, { photoURL: downloadURL });
       
-      await refetchUserProfile();
-
       toast({
         title: 'Profile Picture Updated',
         description: 'Your new profile picture has been saved.',
       });
       setPreview(null);
       form.reset();
+      success = true;
 
     } catch (error: any) {
       console.error("Error uploading profile picture:", error);
@@ -90,6 +89,9 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
       });
     } finally {
       setIsUploading(false);
+      if (success) {
+        await refetchUserProfile();
+      }
     }
   };
   
