@@ -5,11 +5,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from '@/components/ui/button';
 import { Users, Eye, BarChart2, Mail, Loader2, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import Image from 'next/image';
 import { useRole } from '@/context/role-context';
 import { getCoachClients, getCoachSessions, type UserProfile, type Session } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
@@ -133,12 +132,9 @@ export default function CoachMyClientsPage() {
               <Card key={client.uid} className="shadow-light hover:shadow-md transition-shadow duration-200 flex flex-col">
                 <CardHeader className="items-center text-center">
                   <Avatar className="h-20 w-20 mb-3 border-2 border-primary/50">
-                    <Image 
+                    <AvatarImage 
                       src={client.photoURL || `https://placehold.co/100x100.png?text=${avatarPlaceholder}`} 
                       alt={client.displayName} 
-                      width={100} 
-                      height={100} 
-                      className="aspect-square"
                       data-ai-hint="avatar person" 
                     />
                     <AvatarFallback>{avatarPlaceholder}</AvatarFallback>

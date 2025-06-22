@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { PageHeader } from "@/components/shared/page-header";
 import { StripeSettingsForm } from "@/components/forms/stripe-settings-form";
+import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Database, Loader2, TriangleAlert } from 'lucide-react';
@@ -30,7 +31,7 @@ export default function AdminSettingsPage() {
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const { toast } = useToast();
-  const { role, isLoading: isRoleLoading } = useRole();
+  const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export default function AdminSettingsPage() {
   });
 
   useEffect(() => {
-    if (!firebaseAvailable || role !== 'admin') {
+    if (!firebaseAvailable || (role !== 'admin' && role !== 'super-admin')) {
       setIsFetchingCoaches(false);
       return;
     }
@@ -108,7 +109,7 @@ export default function AdminSettingsPage() {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
-  if (role !== 'admin') {
+  if ((role !== 'admin' && role !== 'super-admin') || !user || !userProfile) {
     return (
       <div>
         <PageHeader title="Application Settings" description="Manage integrations and platform configurations."/>
@@ -125,6 +126,7 @@ export default function AdminSettingsPage() {
     <div>
       <PageHeader title="Application Settings" description="Manage integrations and platform configurations."/>
       <div className="space-y-8 mt-8">
+        <ProfilePictureForm user={user} userProfile={userProfile} />
         <StripeSettingsForm />
 
         <Card className="shadow-light">

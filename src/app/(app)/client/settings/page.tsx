@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/component
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
 
 const selectCoachSchema = z.object({
   coachId: z.string().min(1, 'Please select a coach.'),
@@ -105,7 +106,7 @@ export default function ClientSettingsPage() {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
-  if (role !== 'client') {
+  if (role !== 'client' || !user || !userProfile) {
     return (
       <div>
         <PageHeader title="My Settings"/>
@@ -122,6 +123,7 @@ export default function ClientSettingsPage() {
     <div>
       <PageHeader title="My Settings" description="Manage your coach assignment and profile details."/>
       <div className="space-y-8 mt-8">
+        <ProfilePictureForm user={user} userProfile={userProfile} />
         <Card className="w-full max-w-2xl shadow-light">
           <CardHeader>
             <CardTitle className="font-headline flex items-center">

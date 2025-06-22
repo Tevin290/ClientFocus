@@ -132,9 +132,6 @@ export default function AdminCoachesPage() {
                     <AvatarImage 
                       src={coach.photoURL || `https://placehold.co/100x100.png?text=${avatarPlaceholder}`} 
                       alt={coach.displayName}
-                      width={100}
-                      height={100}
-                      className="aspect-square"
                       data-ai-hint="avatar person"
                     />
                     <AvatarFallback>{avatarPlaceholder}</AvatarFallback>

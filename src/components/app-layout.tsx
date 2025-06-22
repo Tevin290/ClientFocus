@@ -70,6 +70,7 @@ const navItems: NavItem[] = [
   { href: '/coach/log-session', label: 'Log Session', icon: FileText, roles: ['coach'] },
   { href: '/coach/my-sessions', label: 'My Sessions', icon: History, roles: ['coach'] },
   { href: '/coach/my-clients', label: 'My Clients', icon: Users, roles: ['coach'] },
+  { href: '/coach/settings', label: 'Settings', icon: Settings, roles: ['coach'] },
 
   { href: '/client/dashboard', label: 'Client Dashboard', icon: LayoutDashboard, roles: ['client'], disabled: false },
   { href: '/client/history', label: 'Session History', icon: History, roles: ['client'], disabled: false },
@@ -130,7 +131,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
      // Render skeletons or a simplified header during loading
   } else if (userProfile) {
       if (userProfile.displayName) {
-          avatarFallback = userProfile.displayName.charAt(0).toUpperCase();
+          avatarFallback = userProfile.displayName.split(' ').map(n => n[0]).join('') || 'U';
           avatarAltText = userProfile.displayName;
           userDisplayName = userProfile.displayName;
       }
