@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle, X } from "lucide-react";
+import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle, Archive, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -72,15 +72,18 @@ export default function AdminSessionReviewPage() {
       // Otherwise, update the status in place.
       if (role === 'admin' && newStatus === 'Approved') {
          setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
+         toast({
+            title: 'Session Approved',
+            description: 'The session has been moved to the billing queue for the Super Admin.',
+         });
       } else {
          setSessions(prevSessions => prevSessions.map(s => s.id === sessionId ? { ...s, status: newStatus } : s));
+         toast({
+          title: `Session ${newStatus}`,
+          description: `Session has been marked as ${newStatus.toLowerCase()}.`,
+          variant: newStatus === 'Billed' ? "default" : undefined,
+        });
       }
-
-      toast({
-        title: `Session ${newStatus}`,
-        description: `Session has been marked as ${newStatus.toLowerCase()}.`,
-        variant: newStatus === 'Billed' ? "default" : undefined,
-      });
     } catch (error) {
       console.error(`Error updating session ${sessionId} to ${newStatus}:`, error);
       toast({ title: "Update Failed", description: "Could not update session status.", variant: "destructive" });
@@ -95,7 +98,7 @@ export default function AdminSessionReviewPage() {
       // Persist the change in Firestore
       await updateSession(sessionId, { isArchived: true });
       toast({
-        title: 'Session Archived',
+        title: 'Session Dismissed',
         description: 'The session has been archived and removed from your view.',
       });
     } catch (error) {
@@ -211,32 +214,53 @@ export default function AdminSessionReviewPage() {
                         <FileText className="h-4 w-4" />
                       </Button>
                       
-                      {role === 'admin' && session.status === 'Under Review' && (
+                      {/* Admin Actions */}
+                      {role === 'admin' && (
                         <>
-                          <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Approved')} className="hover:border-primary">
-                            <CheckCircle className="mr-1 h-4 w-4" /> Approve
-                          </Button>
-                           <Button variant="destructive" size="sm" onClick={() => handleUpdateStatus(session.id, 'Denied')}>
-                            <XCircle className="mr-1 h-4 w-4" /> Deny
-                          </Button>
+                          {session.status === 'Under Review' && (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Approved')} className="hover:border-primary">
+                                <CheckCircle className="mr-1 h-4 w-4" /> Approve
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleUpdateStatus(session.id, 'Denied')}>
+                                <XCircle className="mr-1 h-4 w-4" /> Deny
+                              </Button>
+                            </>
+                          )}
+                          {session.status === 'Denied' && (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Under Review')}>
+                                <RotateCcw className="mr-1 h-4 w-4" /> Undo
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDismiss(session.id)}>
+                                <Archive className="mr-1 h-4 w-4 text-muted-foreground" /> Dismiss
+                              </Button>
+                            </>
+                          )}
                         </>
                       )}
-                       {role === 'admin' && session.status === 'Denied' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleDismiss(session.id)}>
-                            <X className="mr-1 h-4 w-4 text-muted-foreground" /> Dismiss
-                          </Button>
-                       )}
                       
-                      {role === 'super-admin' && session.status === 'Approved' && (
-                        <Button variant="default" size="sm" onClick={() => handleUpdateStatus(session.id, 'Billed')} className="bg-success hover:bg-success/90 text-success-foreground">
-                          <DollarSign className="mr-1 h-4 w-4" /> Bill Client
-                        </Button>
+                      {/* Super Admin Actions */}
+                      {role === 'super-admin' && (
+                         <>
+                          {session.status === 'Approved' && (
+                             <Button variant="default" size="sm" onClick={() => handleUpdateStatus(session.id, 'Billed')} className="bg-success hover:bg-success/90 text-success-foreground">
+                              <DollarSign className="mr-1 h-4 w-4" /> Bill Client
+                            </Button>
+                          )}
+                          {session.status === 'Billed' && (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(session.id, 'Approved')}>
+                                <RotateCcw className="mr-1 h-4 w-4" /> Undo Bill
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDismiss(session.id)}>
+                                <Archive className="mr-1 h-4 w-4 text-muted-foreground" /> Dismiss
+                              </Button>
+                            </>
+                          )}
+                        </>
                       )}
-                      {role === 'super-admin' && session.status === 'Billed' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleDismiss(session.id)}>
-                            <X className="mr-1 h-4 w-4 text-muted-foreground" /> Dismiss
-                          </Button>
-                      )}
+
                     </TableCell>
                   </TableRow>
                 ))}
