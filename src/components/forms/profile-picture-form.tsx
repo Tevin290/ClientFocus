@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
+import { useForm, type SubmitHandler, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -55,7 +55,19 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
     }
   };
 
+  const onInvalid = (errors: FieldErrors<ProfilePictureFormValues>) => {
+    console.error("[ProfileUpload] Form validation failed:", errors);
+    // You can inspect the `errors` object to see which validation failed.
+    const errorMessage = errors.profileImage?.message as string || "The selected file is not valid. Please check the requirements.";
+    toast({
+      title: "Invalid File",
+      description: errorMessage,
+      variant: "destructive"
+    });
+  };
+
   const onSubmit: SubmitHandler<ProfilePictureFormValues> = async (data) => {
+    console.log("[ProfileUpload] onSubmit triggered. Data:", data);
     const file = data.profileImage[0];
     if (!file || !user?.uid) return;
 
@@ -118,7 +130,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
         <CardDescription>Update your profile photo. This will be visible to others on the platform.</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-6">
                 <Avatar className="h-24 w-24 border-4 border-primary/50">
