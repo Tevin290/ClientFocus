@@ -87,12 +87,22 @@ export default function AdminSessionReviewPage() {
     }
   };
 
-  const handleDismiss = (sessionId: string) => {
+  const handleDismiss = async (sessionId: string) => {
+    // Optimistically update the UI for a snappy user experience
     setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
-    toast({
-      title: 'Session Dismissed',
-      description: 'The session has been removed from your view.',
-    });
+    
+    try {
+      // Persist the change in Firestore
+      await updateSession(sessionId, { isArchived: true });
+      toast({
+        title: 'Session Archived',
+        description: 'The session has been archived and removed from your view.',
+      });
+    } catch (error) {
+      console.error(`Error dismissing/archiving session ${sessionId}:`, error);
+      toast({ title: "Archive Failed", description: "Could not archive the session. It may reappear on refresh.", variant: "destructive" });
+      // In a more complex app, you might want to add the session back to the list here to reflect the failed state
+    }
   };
   
   const getStatusBadge = (status: SessionStatus) => {

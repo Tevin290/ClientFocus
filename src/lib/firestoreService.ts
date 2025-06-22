@@ -180,6 +180,7 @@ export async function logSession(sessionData: NewSessionData): Promise<string> {
       sessionDate: Timestamp.fromDate(new Date(sessionData.sessionDate)),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      isArchived: false, // Default to not archived
     });
     return docRef.id;
   } catch (error: any) {
@@ -233,10 +234,18 @@ export async function getAllSessionsForAdmin(role: UserRole): Promise<Session[]>
 
     if (role === 'admin') {
       // Admin sees sessions that are 'Under Review' or 'Denied' to approve/deny/dismiss them.
-      q = query(sessionsCol, where('status', 'in', ['Under Review', 'Denied']), orderBy('sessionDate', 'desc'));
+      q = query(sessionsCol, 
+        where('status', 'in', ['Under Review', 'Denied']),
+        where('isArchived', '==', false),
+        orderBy('sessionDate', 'desc')
+      );
     } else if (role === 'super-admin') {
       // Super Admin sees 'Approved' or 'Billed' sessions to bill them or dismiss them.
-      q = query(sessionsCol, where('status', 'in', ['Approved', 'Billed']), orderBy('sessionDate', 'desc'));
+      q = query(sessionsCol, 
+        where('status', 'in', ['Approved', 'Billed']),
+        where('isArchived', '==', false),
+        orderBy('sessionDate', 'desc')
+      );
     } else {
       console.warn(`getAllSessionsForAdmin called with an invalid role: ${role}`);
       return [];

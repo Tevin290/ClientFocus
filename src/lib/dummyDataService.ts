@@ -107,6 +107,7 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
       status: template.status,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      isArchived: false, // Default to not archived
     };
 
     batch.set(newSessionRef, sessionData);
