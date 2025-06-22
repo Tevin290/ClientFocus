@@ -1,16 +1,10 @@
-
 'use client';
 
-import React, { useState } from 'react';
-import { useForm, type SubmitHandler, type FieldErrors } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Upload, UserCircle } from 'lucide-react';
+import { Loader2, UploadCloud, UserCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRole } from '@/context/role-context';
 import { auth, storage } from '@/lib/firebase';
@@ -18,67 +12,79 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateUserProfile } from '@/lib/firestoreService';
 import { updateProfile } from 'firebase/auth';
 import type { UserProfile } from '@/lib/firestoreService';
-
-const profilePictureSchema = z.object({
-  profileImage: z
-    .any()
-    .refine((files) => files?.length == 1, 'File is required.')
-    .refine((files) => files?.[0]?.size <= 5000000, `Max file size is 5MB.`)
-    .refine(
-      (files) => ['image/jpeg', 'image/png', 'image/heic', 'image/heif'].includes(files?.[0]?.type),
-      'Only .jpg, .png, and .heic formats are supported.'
-    ),
-});
-
-type ProfilePictureFormValues = z.infer<typeof profilePictureSchema>;
+import { cn } from '@/lib/utils';
 
 interface ProfilePictureFormProps {
   user: { uid: string; email: string | null; displayName: string | null; };
   userProfile: UserProfile;
 }
 
+const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp'];
+
 export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProps) {
   const { toast } = useToast();
   const { refetchUserProfile } = useRole();
   const [isUploading, setIsUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
-
-  const form = useForm<ProfilePictureFormValues>({
-    resolver: zodResolver(profilePictureSchema),
-  });
+  const [preview, setPreview] = useState<string | null>(userProfile.photoURL);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setPreview(URL.createObjectURL(file));
-      form.setValue('profileImage', event.target.files as FileList, { shouldValidate: true });
+    // Reset the input value to allow re-selecting the same file
+    if (event.target) {
+      event.target.value = '';
     }
+
+    if (!file) return;
+
+    // --- Start Validation ---
+    console.log(`[ProfileUpload] Validating file: ${file.name}, size: ${file.size}, type: ${file.type}`);
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const errorMsg = `File is too large. Max size is ${MAX_FILE_SIZE_MB}MB.`;
+      console.error("[ProfileUpload] Validation failed:", errorMsg);
+      setError(errorMsg);
+      toast({ title: "Invalid File", description: errorMsg, variant: "destructive" });
+      return;
+    }
+
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      const errorMsg = 'Invalid file type. Only JPG, PNG, WEBP, and HEIC formats are supported.';
+      console.error("[ProfileUpload] Validation failed:", errorMsg);
+      setError(errorMsg);
+      toast({ title: "Invalid File", description: errorMsg, variant: "destructive" });
+      return;
+    }
+    // --- End Validation ---
+
+    console.log("[ProfileUpload] File validation successful.");
+    setError(null);
+    setSelectedFile(file);
+    setPreview(URL.createObjectURL(file));
   };
 
-  const onInvalid = (errors: FieldErrors<ProfilePictureFormValues>) => {
-    console.error("[ProfileUpload] Form validation failed:", errors);
-    // You can inspect the `errors` object to see which validation failed.
-    const errorMessage = errors.profileImage?.message as string || "The selected file is not valid. Please check the requirements.";
-    toast({
-      title: "Invalid File",
-      description: errorMessage,
-      variant: "destructive"
-    });
-  };
-
-  const onSubmit: SubmitHandler<ProfilePictureFormValues> = async (data) => {
-    console.log("[ProfileUpload] onSubmit triggered. Data:", data);
-    const file = data.profileImage[0];
-    if (!file || !user?.uid) return;
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      toast({ title: "No File Selected", description: "Please choose a file to upload.", variant: "destructive" });
+      return;
+    }
+    if (!user?.uid) {
+        toast({ title: "Authentication Error", description: "User could not be identified.", variant: "destructive" });
+        return;
+    }
 
     setIsUploading(true);
-    console.log(`[ProfileUpload] Starting upload for user ${user.uid}, file: ${file.name}, size: ${file.size} bytes`);
     let success = false;
+    console.log(`[ProfileUpload] Starting upload for user ${user.uid}, file: ${selectedFile.name}`);
+
     try {
-      const storageRef = ref(storage, `profile-pictures/${user.uid}/${file.name}`);
+      const storageRef = ref(storage, `profile-pictures/${user.uid}/${selectedFile.name}`);
       console.log("[ProfileUpload] Storage reference created:", storageRef.fullPath);
       
-      const uploadResult = await uploadBytes(storageRef, file);
+      const uploadResult = await uploadBytes(storageRef, selectedFile);
       console.log("[ProfileUpload] Upload successful!", uploadResult);
       
       const downloadURL = await getDownloadURL(uploadResult.ref);
@@ -98,8 +104,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
         title: 'Profile Picture Updated',
         description: 'Your new profile picture has been saved.',
       });
-      setPreview(null);
-      form.reset();
+      setSelectedFile(null); // Clear the selected file after successful upload
       success = true;
 
     } catch (error: any) {
@@ -117,7 +122,13 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
       }
     }
   };
-  
+
+  const handleCancel = () => {
+    setSelectedFile(null);
+    setPreview(userProfile.photoURL);
+    setError(null);
+  };
+
   const avatarPlaceholder = userProfile?.displayName?.split(' ').map(n => n[0]).join('') || 'U';
 
   return (
@@ -129,50 +140,67 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
         </CardTitle>
         <CardDescription>Update your profile photo. This will be visible to others on the platform.</CardDescription>
       </CardHeader>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-6">
-                <Avatar className="h-24 w-24 border-4 border-primary/50">
-                    <AvatarImage src={preview || userProfile.photoURL || undefined} alt={userProfile.displayName || ''} data-ai-hint="avatar person" />
-                    <AvatarFallback className="text-3xl">{avatarPlaceholder}</AvatarFallback>
-                </Avatar>
-                <div className="w-full">
-                     <FormField
-                      control={form.control}
-                      name="profileImage"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>New Profile Image</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="file" 
-                              accept="image/jpeg,image/png,image/heic,image/heif"
-                              onChange={handleFileChange}
-                              disabled={isUploading}
-                              className="file:text-primary file:font-semibold"
-                            />
-                          </FormControl>
-                           <FormDescription>Max 5MB. Supports JPG, PNG, HEIC.</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                </div>
-            </div>
-          </CardContent>
-          <CardFooter>
-             <Button type="submit" disabled={isUploading || !form.formState.isValid}>
-              {isUploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
+      <CardContent>
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <div className="relative group">
+            <Avatar className="h-32 w-32 border-4 border-primary/50">
+              <AvatarImage src={preview || undefined} alt={userProfile.displayName || ''} data-ai-hint="avatar person" />
+              <AvatarFallback className="text-4xl">{avatarPlaceholder}</AvatarFallback>
+            </Avatar>
+             <button
+              onClick={() => !isUploading && fileInputRef.current?.click()}
+              className={cn(
+                "absolute inset-0 bg-black/50 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:opacity-100",
+                isUploading && "cursor-not-allowed"
               )}
-              {isUploading ? 'Uploading...' : 'Upload & Save'}
-            </Button>
-          </CardFooter>
-        </form>
-      </Form>
+              aria-label="Change profile picture"
+            >
+              <UploadCloud className="h-8 w-8 text-white" />
+            </button>
+          </div>
+          <div className="flex-grow w-full text-center sm:text-left">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept={ALLOWED_MIME_TYPES.join(',')}
+              className="hidden"
+              disabled={isUploading}
+            />
+            {selectedFile ? (
+              <div>
+                <p className="font-semibold text-foreground">Ready to upload:</p>
+                <p className="text-sm text-muted-foreground truncate">{selectedFile.name}</p>
+                 <p className="text-xs text-muted-foreground">{Math.round(selectedFile.size / 1024)} KB</p>
+              </div>
+            ) : (
+              <div>
+                <h3 className="font-semibold text-lg">Click image to upload</h3>
+                <p className="text-sm text-muted-foreground">Max {MAX_FILE_SIZE_MB}MB. Supports JPG, PNG, WEBP, HEIC.</p>
+              </div>
+            )}
+             {error && (
+              <p className="mt-2 text-sm font-medium text-destructive">{error}</p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className="flex justify-end gap-2">
+         {selectedFile && (
+          <Button variant="ghost" onClick={handleCancel} disabled={isUploading}>
+            <XCircle className="mr-2 h-4 w-4" />
+            Cancel
+          </Button>
+        )}
+        <Button onClick={handleUpload} disabled={isUploading || !selectedFile}>
+          {isUploading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <UploadCloud className="mr-2 h-4 w-4" />
+          )}
+          {isUploading ? 'Uploading...' : 'Upload & Save'}
+        </Button>
+      </CardFooter>
     </Card>
   );
 }
