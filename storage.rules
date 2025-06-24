@@ -1,13 +1,23 @@
+
 rules_version = '2';
 
+// The Firebase project name in this comment is dynamic and will be
+// replaced with your project ID when you deploy.
+// To find your project ID, run `firebase projects:list` or visit
+// https://console.firebase.google.com/
 service firebase.storage {
+  // Corresponds to the project ID specified in your .firebaserc file
   match /b/{bucket}/o {
-    // This rule allows a user to upload their own profile picture.
-    // It is simplified for debugging. We temporarily removed size and type checks.
-    // Read access is granted to any authenticated user to see avatars.
-    match /profile-pictures/{userId}/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId;
+    // Rules for profile pictures
+    match /profile-pictures/{userId}/{allPaths=**} {
+      // Anyone can read profile pictures (e.g., to display avatars)
+      allow read;
+      
+      // Only the authenticated user can write to their own directory.
+      // This covers create, update, and delete operations.
+      allow write: if request.auth != null && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024 // Max 5MB
+                   && request.resource.contentType.matches('image/.*'); // Must be an image
     }
   }
 }
