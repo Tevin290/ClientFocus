@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function CoachMySessionsPage() {
-  const { role, user, isLoading: isRoleLoading } = useRole();
+  const { role, user, userProfile, isLoading: isRoleLoading } = useRole();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const { toast } = useToast();
@@ -27,8 +27,8 @@ export default function CoachMySessionsPage() {
   }, []);
 
   useEffect(() => {
-    if (isRoleLoading || !firebaseAvailable) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoadingSessions(false);
+    if (isRoleLoading || !firebaseAvailable || !userProfile?.companyId) {
+      if (!isRoleLoading && (!firebaseAvailable || !userProfile?.companyId)) setIsLoadingSessions(false);
       return;
     }
 
@@ -36,7 +36,7 @@ export default function CoachMySessionsPage() {
       const fetchSessions = async () => {
         setIsLoadingSessions(true);
         try {
-          const fetchedSessions = await getCoachSessions(user.uid);
+          const fetchedSessions = await getCoachSessions(user.uid, userProfile.companyId!);
           setSessions(fetchedSessions);
         } catch (error) {
           console.error("Failed to fetch coach sessions:", error);
@@ -50,7 +50,7 @@ export default function CoachMySessionsPage() {
       setSessions([]);
       setIsLoadingSessions(false);
     }
-  }, [role, user, isRoleLoading, toast, firebaseAvailable]);
+  }, [role, user, userProfile, isRoleLoading, toast, firebaseAvailable]);
 
 
   const handleEditSession = (sessionId: string) => {
