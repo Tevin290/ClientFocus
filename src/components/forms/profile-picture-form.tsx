@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useRef } from 'react';
@@ -117,10 +118,32 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
 
     } catch (error: any) {
       console.error("[ProfileUpload] Full error object:", error);
+      
+      let title = 'Upload Failed';
+      let description = 'Could not upload profile picture. Please try again.';
+
+      if (error.code) {
+        switch (error.code) {
+          case 'storage/unauthorized':
+            description = "Permission denied. Please ensure your Storage Security Rules are deployed and correct.";
+            break;
+          case 'storage/object-not-found':
+            description = "The file could not be found during the upload process.";
+            break;
+          case 'storage/unknown':
+            title = 'Network or CORS Error';
+            description = "The upload failed due to a network or CORS issue. Please ensure you have applied the CORS configuration to your bucket using the `gcloud` command and the `cors.json` file.";
+            break;
+          default:
+            description = `An unexpected error occurred: ${error.message}`;
+        }
+      }
+
       toast({
-        title: 'Upload Failed',
-        description: error.message || 'Could not upload profile picture. Check console for details.',
+        title: title,
+        description: description,
         variant: 'destructive',
+        duration: 9000,
       });
     } finally {
       setIsUploading(false);
