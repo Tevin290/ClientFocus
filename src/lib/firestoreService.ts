@@ -132,13 +132,14 @@ export async function updateUserProfile(uid: string, updates: Partial<UserProfil
 }
 
 
-export async function getClientSessions(clientId: string): Promise<Session[]> {
+export async function getClientSessions(clientId: string, companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(
       sessionsCol,
       where('clientId', '==', clientId),
+      where('companyId', '==', companyId),
       orderBy('sessionDate', 'desc')
     );
     const snapshot = await getDocs(q);
@@ -155,6 +156,9 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
     });
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getClientSessions for clientID ${clientId}:`, error);
+    if (error.code === 'failed-precondition') {
+        throw new Error(`Failed to fetch client sessions. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
+    }
     throw new Error(`Failed to fetch client sessions for client ID ${clientId}. See server logs for details.`);
   }
 }

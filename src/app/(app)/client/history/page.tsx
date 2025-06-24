@@ -11,7 +11,7 @@ import { getClientSessions } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function ClientHistoryPage() {
-  const { role, user, isLoading: isRoleLoading } = useRole();
+  const { role, user, userProfile, isLoading: isRoleLoading } = useRole();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
@@ -27,11 +27,11 @@ export default function ClientHistoryPage() {
       return;
     }
 
-    if (role === 'client' && user?.uid) {
+    if (role === 'client' && user?.uid && userProfile?.companyId) {
       const fetchSessions = async () => {
         setIsLoadingSessions(true);
         try {
-          const fetchedSessions = await getClientSessions(user.uid); 
+          const fetchedSessions = await getClientSessions(user.uid, userProfile.companyId); 
           setSessions(fetchedSessions);
         } catch (error) {
           console.error("Failed to fetch client sessions:", error);
@@ -43,9 +43,12 @@ export default function ClientHistoryPage() {
       fetchSessions();
     } else {
       setIsLoadingSessions(false);
+      if (role === 'client' && !userProfile?.companyId) {
+        console.warn("Client is not associated with a company. Cannot fetch sessions.");
+      }
       setSessions([]); // Clear sessions if not applicable
     }
-  }, [role, user, isRoleLoading, firebaseAvailable]);
+  }, [role, user, userProfile, isRoleLoading, firebaseAvailable]);
 
   if (isLoadingSessions || isRoleLoading) {
     return (
