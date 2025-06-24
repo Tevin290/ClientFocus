@@ -156,23 +156,37 @@ After deploying the updated code and Firestore rules:
 
 ## Troubleshooting
 
-### Profile Picture Upload Fails (CORS Error)
+### Profile Picture Upload Fails (CORS or 404 Error)
 
-If you encounter a CORS error in the browser console when trying to upload a profile picture, it means your Cloud Storage bucket needs to be configured to accept requests from your web app's domain.
+If you encounter a CORS error (`...has been blocked by CORS policy...`) or a `404 Not Found` error when running the `gcloud` command, it means your Cloud Storage bucket is not configured correctly. This is a one-time setup that must be done from the command line.
 
-This is a one-time setup that must be done from the command line.
+The most common cause of failure is that the `gcloud` command-line tool is not authenticated with the correct Google account that has access to this Firebase project.
 
-1.  **Open the Terminal** in Firebase Studio.
-2.  **Set the correct project** by running this command:
+**Follow these steps exactly in the Firebase Studio Terminal:**
+
+1.  **Log in to Google Cloud:** This will open a browser window for you to log in with the Google account associated with your Firebase project.
+    ```bash
+    gcloud auth login
+    ```
+    *Follow the prompts in your browser to complete the login.*
+
+2.  **Verify the Account:** After logging in, confirm you are using the correct account.
+    ```bash
+    gcloud auth list
+    ```
+    *Ensure the account marked as `ACTIVE` is the one with access to the `sessionsync-wbo8u` project.*
+
+3.  **Set the Correct Project:** Explicitly tell `gcloud` to use your project.
     ```bash
     gcloud config set project sessionsync-wbo8u
     ```
-3.  **Apply the CORS configuration** by running the following command, which uses the correct bucket name for your project:
-    ```bash
-    gcloud storage buckets update gs://sessionsync-wbo8u.firebasestorage.app --cors-file=cors.json
-    ```
 
-This should resolve the upload issue permanently.
+4.  **Apply the CORS Configuration:** Now, run the command to update the bucket. This command uses the correct bucket name for your project.
+    ```bash
+    gcloud storage buckets update gs://sessionsync-wbo8u.appspot.com --cors-file=cors.json
+    ```
+    
+This process ensures you are logged into the correct account and targeting the correct project, which should resolve the `404` and CORS errors permanently.
 
 ## Genkit (AI Features)
 
