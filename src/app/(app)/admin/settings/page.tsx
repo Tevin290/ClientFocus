@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { getStripeMode, setStripeMode } from '@/lib/stripeService';
+import { getStripeMode, setStripeMode } from '@/lib/stripeClient';
 
 
 const selectCoachSchema = z.object({

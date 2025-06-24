@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createConnectAccountLink, getStripeMode } from '@/lib/stripeService';
+import { createConnectAccountLink } from '@/lib/stripeService';
+import { getStripeMode } from '@/lib/stripeClient';
 import type { CompanyProfile } from '@/lib/firestoreService';
 
 interface StripeConnectFormProps {

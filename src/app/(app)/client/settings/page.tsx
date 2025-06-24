@@ -17,7 +17,8 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
-import { createCheckoutSetupSession, getStripeMode } from '@/lib/stripeService';
+import { createCheckoutSetupSession } from '@/lib/stripeService';
+import { getStripeMode } from '@/lib/stripeClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const selectCoachSchema = z.object({
