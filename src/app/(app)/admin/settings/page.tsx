@@ -10,7 +10,7 @@ import { StripeSettingsForm } from "@/components/forms/stripe-settings-form";
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Database, Loader2, TriangleAlert } from 'lucide-react';
+import { Database, Loader2, TriangleAlert, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateDummyDataForCoach } from '@/lib/dummyDataService';
 import { getAllCoaches, type UserProfile } from '@/lib/firestoreService';
@@ -19,6 +19,8 @@ import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/component
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { migrateDataToCompany } from '@/lib/migrationService';
+import { Separator } from '@/components/ui/separator';
 
 const selectCoachSchema = z.object({
   coachId: z.string().min(1, 'Please select a coach.'),
@@ -28,6 +30,7 @@ type SelectCoachFormValues = z.infer<typeof selectCoachSchema>;
 
 export default function AdminSettingsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const { toast } = useToast();
@@ -83,10 +86,8 @@ export default function AdminSettingsPage() {
         duration: 7000,
       });
     } catch (error: any) {
-      // Log the full error object to the console for detailed inspection
       console.error("Detailed error during dummy data generation:", error);
       
-      // Create a more informative description for the user toast
       let description = "An unexpected error occurred. Check the browser console for details.";
       if (error.code === 'permission-denied') {
         description = "Permission denied. Please ensure your Firestore security rules allow admins to create users and sessions. Check the console for the exact failed operation.";
@@ -98,12 +99,45 @@ export default function AdminSettingsPage() {
         title: "Dummy Data Generation Failed",
         description: description,
         variant: "destructive",
-        duration: 9000, // Increase duration to allow reading
+        duration: 9000,
       });
     } finally {
       setIsGenerating(false);
     }
   };
+
+  const handleMigration = async () => {
+    if (!firebaseAvailable) {
+      toast({ title: "Operation Failed", description: "Firebase is not configured.", variant: "destructive" });
+      return;
+    }
+    
+    // Confirmation dialog to prevent accidental clicks
+    if (!confirm("Are you absolutely sure? This will modify every user and session document and cannot be easily undone.")) {
+        return;
+    }
+
+    setIsMigrating(true);
+    try {
+        const result = await migrateDataToCompany({ id: 'hearts-and-minds', name: 'Hearts & Minds' });
+        toast({
+            title: "Migration Complete",
+            description: `Assigned ${result.usersUpdated} users and ${result.sessionsUpdated} sessions to Hearts & Minds.`,
+            duration: 7000,
+        });
+    } catch (error: any) {
+        console.error("Migration failed:", error);
+        toast({
+            title: "Migration Failed",
+            description: error.message || "An unexpected error occurred. Check the console.",
+            variant: "destructive",
+            duration: 9000,
+        });
+    } finally {
+        setIsMigrating(false);
+    }
+  };
+
 
   if (isRoleLoading) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -147,6 +181,7 @@ export default function AdminSettingsPage() {
             )}
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleGenerateData)} className="space-y-4">
+                <h4 className="font-medium text-foreground">Generate Dummy Data</h4>
                 <p className="text-sm text-muted-foreground">
                   Select a coach from the dropdown below to generate sample clients and session data for them.
                   This is useful for demonstrating the coach's dashboard and client list features without affecting real client data.
@@ -194,6 +229,29 @@ export default function AdminSettingsPage() {
                 {isGenerating && <p className="text-sm text-primary mt-2">Generating data, please wait...</p>}
               </form>
             </Form>
+
+            {role === 'super-admin' && (
+              <>
+                <Separator className="my-6" />
+                <div>
+                  <h4 className="font-medium text-foreground">Multi-Tenant Migration</h4>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This is a one-time action to prepare for a multi-tenant architecture. It will create a "Hearts & Minds" company and assign all existing users and sessions to it. This action is irreversible.
+                  </p>
+                  <Button
+                      onClick={handleMigration}
+                      disabled={isMigrating || !firebaseAvailable}
+                      variant="destructive"
+                      className="mt-4"
+                  >
+                      {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Building className="mr-2 h-4 w-4" />}
+                      Migrate All Data to Hearts & Minds
+                  </Button>
+                  {isMigrating && <p className="text-sm text-destructive mt-2">Migrating all data, please wait. Do not close this page.</p>}
+                </div>
+              </>
+            )}
+
           </CardContent>
         </Card>
       </div>

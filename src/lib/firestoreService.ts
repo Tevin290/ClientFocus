@@ -28,6 +28,7 @@ export interface UserProfile {
   updatedAt?: Timestamp | FieldValue;
   coachId?: string;
   stripeCustomerId?: string;
+  companyId?: string;
 }
 
 export interface NewSessionData {
@@ -90,6 +91,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
         createdAt: createdAtTimestamp,
         coachId: data.coachId || undefined,
         stripeCustomerId: data.stripeCustomerId || undefined,
+        companyId: data.companyId || undefined,
       };
       return profile;
     }

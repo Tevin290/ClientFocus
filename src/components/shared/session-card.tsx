@@ -16,6 +16,7 @@ export interface Session {
   videoLink?: string;
   status?: 'Under Review' | 'Approved' | 'Denied' | 'Billed'; // For admin/coach views
   isArchived?: boolean;
+  companyId?: string;
 }
 
 interface SessionCardProps {
