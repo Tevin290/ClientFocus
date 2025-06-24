@@ -1,4 +1,6 @@
 
+'use server';
+
 import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue, query, where, orderBy, getDocs, addDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured, auth } from './firebase';
 import type { Session } from '@/components/shared/session-card';
@@ -344,31 +346,35 @@ export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
   ensureFirebaseIsOperational();
   try {
     const usersCol = collection(db, 'users');
-    // Query without ordering to avoid needing a composite index for the order-by clause.
-    const q = query(usersCol, where('role', '==', 'coach'), where('companyId', '==', companyId));
+    // Query for all users in the company to avoid composite index.
+    const q = query(usersCol, where('companyId', '==', companyId));
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
     }
-    const coaches = snapshot.docs.map(doc => {
+
+    const coaches: UserProfile[] = [];
+    snapshot.docs.forEach(doc => {
       const data = doc.data();
-      let createdAtTimestamp: Timestamp;
-      if (data.createdAt instanceof Timestamp) {
-        createdAtTimestamp = data.createdAt;
-      } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
-        createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
-      } else {
-        createdAtTimestamp = Timestamp.now();
+      if (data.role === 'coach') {
+        let createdAtTimestamp: Timestamp;
+        if (data.createdAt instanceof Timestamp) {
+          createdAtTimestamp = data.createdAt;
+        } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+          createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+        } else {
+          createdAtTimestamp = Timestamp.now();
+        }
+        coaches.push({
+          uid: data.uid,
+          email: data.email,
+          displayName: data.displayName,
+          role: 'coach',
+          photoURL: data.photoURL || null,
+          createdAt: createdAtTimestamp,
+          companyId: data.companyId,
+        } as UserProfile);
       }
-      return {
-        uid: data.uid,
-        email: data.email,
-        displayName: data.displayName,
-        role: 'coach',
-        photoURL: data.photoURL || null,
-        createdAt: createdAtTimestamp,
-        companyId: data.companyId,
-      } as UserProfile;
     });
 
     // Perform sorting in code
@@ -376,7 +382,7 @@ export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
     return coaches;
 
   } catch (error: any) {
-    console.error(`Detailed Firebase Error in getAllCoaches:`, error);
+    console.error(`Detailed Firebase Error in getAllCoaches for company ${companyId}:`, error);
      if (error.code === 'failed-precondition') {
       throw new Error(`Failed to fetch coaches. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
     }
@@ -388,37 +394,37 @@ export async function getCoachClients(coachId: string, companyId: string): Promi
   ensureFirebaseIsOperational();
   try {
     const usersCol = collection(db, 'users');
-    // Query without ordering to avoid needing a composite index for the order-by clause.
-    const q = query(
-      usersCol,
-      where('role', '==', 'client'),
-      where('coachId', '==', coachId),
-      where('companyId', '==', companyId)
-    );
+    // Query only by coachId to avoid needing a composite index on multiple fields.
+    const q = query(usersCol, where('coachId', '==', coachId));
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
     }
-    const clients = snapshot.docs.map(doc => {
+
+    const clients: UserProfile[] = [];
+    snapshot.docs.forEach(doc => {
       const data = doc.data();
-      let createdAtTimestamp: Timestamp;
-      if (data.createdAt instanceof Timestamp) {
-        createdAtTimestamp = data.createdAt;
-      } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
-        createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
-      } else {
-        createdAtTimestamp = Timestamp.now();
+      // Filter in-code for companyId and role.
+      if (data.companyId === companyId && data.role === 'client') {
+          let createdAtTimestamp: Timestamp;
+          if (data.createdAt instanceof Timestamp) {
+            createdAtTimestamp = data.createdAt;
+          } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+            createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+          } else {
+            createdAtTimestamp = Timestamp.now();
+          }
+          clients.push({
+            uid: data.uid,
+            email: data.email,
+            displayName: data.displayName,
+            role: 'client',
+            photoURL: data.photoURL || null,
+            createdAt: createdAtTimestamp,
+            coachId: data.coachId,
+            companyId: data.companyId,
+          } as UserProfile);
       }
-      return {
-        uid: data.uid,
-        email: data.email,
-        displayName: data.displayName,
-        role: 'client',
-        photoURL: data.photoURL || null,
-        createdAt: createdAtTimestamp,
-        coachId: data.coachId,
-        companyId: data.companyId,
-      } as UserProfile;
     });
 
     // Perform sorting in code
@@ -434,6 +440,7 @@ export async function getCoachClients(coachId: string, companyId: string): Promi
     throw new Error(`Failed to fetch clients for coach ID ${coachId}. See server logs for details.`);
   }
 }
+
 
 export async function getAllSessions(companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
