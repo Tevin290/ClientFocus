@@ -107,26 +107,34 @@ export default function AdminSettingsPage() {
   };
 
   const handleMigration = async () => {
+    console.log("[Migration] handleMigration triggered.");
     if (!firebaseAvailable) {
       toast({ title: "Operation Failed", description: "Firebase is not configured.", variant: "destructive" });
+      console.log("[Migration] Aborted: Firebase not available.");
       return;
     }
     
-    // Confirmation dialog to prevent accidental clicks
-    if (!confirm("Are you absolutely sure? This will modify every user and session document and cannot be easily undone.")) {
+    console.log("[Migration] Popping confirmation dialog.");
+    const isConfirmed = confirm("Are you absolutely sure? This will modify every user and session document and cannot be easily undone.");
+    
+    if (!isConfirmed) {
+        console.log("[Migration] User cancelled operation.");
         return;
     }
 
+    console.log("[Migration] User confirmed. Setting isMigrating to true.");
     setIsMigrating(true);
     try {
+        console.log("[Migration] Calling migrateDataToCompany server action...");
         const result = await migrateDataToCompany({ id: 'hearts-and-minds', name: 'Hearts & Minds' });
+        console.log("[Migration] Server action successful. Result:", result);
         toast({
             title: "Migration Complete",
             description: `Assigned ${result.usersUpdated} users and ${result.sessionsUpdated} sessions to Hearts & Minds.`,
             duration: 7000,
         });
     } catch (error: any) {
-        console.error("Migration failed:", error);
+        console.error("[Migration] Server action failed:", error);
         toast({
             title: "Migration Failed",
             description: error.message || "An unexpected error occurred. Check the console.",
@@ -134,6 +142,7 @@ export default function AdminSettingsPage() {
             duration: 9000,
         });
     } finally {
+        console.log("[Migration] Finished. Setting isMigrating to false.");
         setIsMigrating(false);
     }
   };
