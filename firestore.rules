@@ -1,79 +1,86 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-    // Safely get a user's role, returning null if the user document doesn't exist.
-    function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Safely get a user's company ID.
-    function getUserCompanyId(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.companyId;
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Safely get user data for rule checks. Returns a default if doc doesn't exist.
+    function getUserData(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data;
     }
     
-    // Check if the requesting user is a Super Admin.
-    function isSuperAdmin() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-             && getUserRole(request.auth.uid) == 'super-admin';
+    function isUserRole(role) {
+        let userRole = getUserData(request.auth.uid).role;
+        return isSignedIn() && userRole == role;
     }
 
-    // Check if the requesting user is an Admin or Super Admin.
-    function isAdmin() {
-      let role = getUserRole(request.auth.uid);
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-             && (role == 'admin' || role == 'super-admin');
+    function isSuperAdmin() { return isUserRole('super-admin'); }
+    function isAdmin() { return isUserRole('admin') || isSuperAdmin(); }
+    function isCoach() { return isUserRole('coach'); }
+    function isClient() { return isUserRole('client'); }
+
+    // Checks if the user being accessed is a client of the requesting coach.
+    function isMyClient(clientDoc) {
+      return isSignedIn()
+             && isCoach()
+             && clientDoc.data.role == 'client'
+             && clientDoc.data.coachId == request.auth.uid
+             && clientDoc.data.companyId == getUserData(request.auth.uid).companyId;
     }
 
-    // Check if the requesting user is the owner of the document.
-    function isOwner(userId) {
-      return request.auth.uid == userId;
+    // Checks if the requesting user is the coach of the user being accessed.
+    function isMyCoach(coachDoc) {
+      return isSignedIn()
+             && isClient()
+             && coachDoc.data.role == 'coach'
+             && getUserData(request.auth.uid).coachId == coachDoc.id
+             && coachDoc.data.companyId == getUserData(request.auth.uid).companyId;
     }
     
-    // Check if the requesting user and the resource are in the same company.
-    function isInSameCompany(resourceCompanyId) {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-             && getUserCompanyId(request.auth.uid) == resourceCompanyId;
+    function isSameCompanyAsRequestor(docData) {
+       return docData.companyId == getUserData(request.auth.uid).companyId;
     }
 
-    // --- Collection Rules ---
 
-    // USERS
-    // All authenticated users can create a user document (for signup).
-    // Subsequent reads and updates are restricted by role and ownership.
-    match /users/{userId} {
-      allow create: if request.auth != null;
-      allow read: if isOwner(userId) 
-                  // An admin can read any user profile within their own company.
-                  || (isAdmin() && isInSameCompany(resource.data.companyId))
-                  // A coach can read a client's profile if they are the assigned coach.
-                  || (
-                      getUserRole(request.auth.uid) == 'coach' 
-                      && resource.data.coachId == request.auth.uid 
-                      && isInSameCompany(resource.data.companyId)
-                  );
-      allow update: if isOwner(userId) || isSuperAdmin();
-      allow delete: if isSuperAdmin();
-    }
-    
-    // SESSIONS
-    // Only authenticated users within the same company can interact with sessions.
-    match /sessions/{sessionId} {
-      allow read: if request.auth != null && isInSameCompany(resource.data.companyId);
-      allow create: if request.auth != null && isInSameCompany(request.resource.data.companyId);
-      allow update: if request.auth != null && isInSameCompany(resource.data.companyId) && 
-                       (isAdmin() || isOwner(resource.data.coachId));
-      allow delete: if isAdmin() && isInSameCompany(resource.data.companyId);
-    }
-    
-    // COMPANIES
-    // Anyone can read company info (e.g., for a public list of companies).
-    // Only super admins can create, update, or delete companies.
+    // Collection: companies
     match /companies/{companyId} {
-      allow read: if true;
-      allow write: if isSuperAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    // Collection: users
+    match /users/{userId} {
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      allow read: if isUser(userId) 
+                  || (isAdmin() && isSameCompanyAsRequestor(resource.data))
+                  || isMyClient(resource)
+                  || isMyCoach(resource);
+
+      allow update: if isUser(userId) 
+                    || (isAdmin() && isSameCompanyAsRequestor(resource.data));
+                    
+      allow delete: if isAdmin();
+    }
+
+    // Collection: sessions
+    match /sessions/{sessionId} {
+      allow create: if (isCoach() && request.resource.data.coachId == request.auth.uid) || isAdmin();
+      
+      allow read, update: if (isCoach() && resource.data.coachId == request.auth.uid && isSameCompanyAsRequestor(resource.data))
+                   || (isClient() && resource.data.clientId == request.auth.uid && isSameCompanyAsRequestor(resource.data))
+                   || (isAdmin() && isSameCompanyAsRequestor(resource.data));
+                   
+      allow delete: if isAdmin();
     }
   }
 }
