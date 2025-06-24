@@ -29,7 +29,8 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
       const { url, error } = await createConnectAccountLink(
         companyProfile.id, 
         companyProfile.name,
-        stripeMode // Pass the current mode
+        stripeMode,
+        companyProfile.stripeAccountId
       );
       if (error || !url) {
         throw new Error(error || 'Failed to get Stripe connection URL.');
@@ -106,5 +107,3 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
     </Card>
   );
 }
-
-    

@@ -5,7 +5,7 @@ import Stripe from 'stripe';
 import { headers } from 'next/headers';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { getCompanyProfile, updateCompanyProfile, updateUserProfile } from './firestoreService';
+import { updateCompanyProfile, updateUserProfile } from './firestoreService';
 import { getStripeSecretKey } from './stripe';
 
 /**
@@ -15,20 +15,17 @@ import { getStripeSecretKey } from './stripe';
 export async function createConnectAccountLink(
     companyId: string, 
     companyName: string,
-    mode: 'test' | 'live'
+    mode: 'test' | 'live',
+    stripeAccountId?: string
 ): Promise<{ url: string | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
+    
+    let finalStripeAccountId = stripeAccountId;
 
-    let companyProfile = await getCompanyProfile(companyId);
-    if (!companyProfile) {
-      throw new Error('Company profile not found.');
-    }
-
-    let { stripeAccountId } = companyProfile;
-
-    if (!stripeAccountId) {
+    if (!finalStripeAccountId) {
+      console.log(`[Stripe Service] No stripeAccountId provided for company ${companyId}. Creating a new one.`);
       const account = await stripe.accounts.create({
         type: 'express',
         company: { name: companyName },
@@ -38,12 +35,16 @@ export async function createConnectAccountLink(
           transfers: { requested: true },
         },
       });
-      stripeAccountId = account.id;
-      await updateCompanyProfile(companyId, { stripeAccountId });
+      finalStripeAccountId = account.id;
+      await updateCompanyProfile(companyId, { stripeAccountId: finalStripeAccountId });
+    }
+
+    if (!finalStripeAccountId) {
+        throw new Error('Could not create or find a Stripe Account ID.');
     }
 
     const accountLink = await stripe.accountLinks.create({
-      account: stripeAccountId,
+      account: finalStripeAccountId,
       refresh_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing`,
       return_url: `${process.env.NEXT_PUBLIC_APP_URL}/stripe/connect/return`,
       type: 'account_onboarding',
@@ -53,6 +54,9 @@ export async function createConnectAccountLink(
 
   } catch (error: any) {
     console.error('[Stripe Service] Error creating Connect account link:', error);
+    if (String(error.message).includes('permission-denied')) {
+        return { url: null, error: 'Database permission denied. Cannot save new Stripe account. Check Firestore rules.' };
+    }
     return { url: null, error: error.message || 'Failed to create Stripe connection link.' };
   }
 }
