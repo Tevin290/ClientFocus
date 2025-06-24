@@ -40,7 +40,7 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
       }
 
       // If a new Stripe account was created on the server, save its ID to Firestore now from the client.
-      if (newAccountId) {
+      if (newAccountId && newAccountId !== companyProfile.stripeAccountId) {
         await updateCompanyProfile(companyProfile.id, { stripeAccountId: newAccountId });
         await refetchCompanyProfile(); // Ensure the local state is updated
       }
@@ -60,6 +60,8 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
   };
 
   const stripeDashboardUrl = `https://dashboard.stripe.com/${stripeMode === 'test' ? 'test/' : ''}accounts/${companyProfile.stripeAccountId}`;
+  
+  const isContinuingOnboarding = companyProfile.stripeAccountId && !companyProfile.stripeAccountOnboarded;
 
   return (
     <Card className="w-full max-w-2xl shadow-light">
@@ -91,13 +93,13 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
           </div>
         ) : (
           <div className="space-y-4">
-             {companyProfile.stripeAccountId && !companyProfile.stripeAccountOnboarded && (
+             {isContinuingOnboarding && (
                 <div className="flex items-center gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950">
                     <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
                     <div>
                         <p className="font-semibold text-yellow-800 dark:text-yellow-200">Onboarding Incomplete</p>
                         <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                            Please complete the Stripe onboarding process to activate your account.
+                            Please complete the Stripe onboarding process to activate your account for billing.
                         </p>
                     </div>
                 </div>
@@ -110,7 +112,11 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
                   <path d="M18.665 9.584l-4.04-1.233L16.299.814h-4.33L8.335 9.584H3.85v4.54h3.69l-1.992 8.244h4.33l4.03-9.52h4.486l2.25-4.63-4.31-.013z" />
                 </svg>
               )}
-              {isConnecting ? 'Redirecting to Stripe...' : `Connect with Stripe (${stripeMode})`}
+              {isConnecting 
+                ? 'Redirecting to Stripe...' 
+                : isContinuingOnboarding
+                  ? `Continue Onboarding (${stripeMode})`
+                  : `Connect with Stripe (${stripeMode})`}
             </Button>
           </div>
         )}

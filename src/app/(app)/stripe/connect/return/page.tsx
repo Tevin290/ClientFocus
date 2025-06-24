@@ -46,7 +46,7 @@ export default function StripeReturnPage() {
               </div>
               <CardTitle className="mt-4 text-2xl font-headline">Onboarding Incomplete</CardTitle>
               <CardDescription>
-                Your Stripe account is linked, but onboarding is not complete. Please return to your billing settings and complete the required steps in Stripe to activate your account.
+                Your Stripe account is linked, but not yet active. To finish, please return to your billing settings and click "Continue Onboarding" to provide the remaining details to Stripe.
               </CardDescription>
             </>
           )}
