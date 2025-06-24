@@ -31,6 +31,14 @@ export interface UserProfile {
   companyId?: string;
 }
 
+export interface CompanyProfile {
+    id: string;
+    name: string;
+    createdAt: Timestamp;
+    stripeAccountId?: string;
+    stripeAccountOnboarded?: boolean;
+}
+
 export interface NewSessionData {
   coachId: string;
   coachName:string;
@@ -208,7 +216,13 @@ export async function getCoachSessions(coachId: string, companyId: string): Prom
     });
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getCoachSessions for coachID ${coachId}:`, error);
-    throw new Error(`Failed to fetch coach sessions for coach ID ${coachId}. See server logs for details.`);
+    let errorMessage = `Failed to fetch coach sessions for coach ID ${coachId}.`;
+    if (error.code === 'failed-precondition' || error.code === 'invalid-argument') {
+      errorMessage = `A Firestore index is likely required or a query value was invalid. Please check the browser's developer console for an index creation link or query details.`
+    } else if (error.message) {
+      errorMessage += ` Reason: ${error.message}`;
+    }
+    throw new Error(errorMessage);
   }
 }
 
@@ -416,11 +430,39 @@ export async function getAllSessions(companyId: string): Promise<Session[]> {
         sessionDate: (data.sessionDate as Timestamp).toDate().toISOString(),
       } as Session;
     });
-  } catch (error: any) {
+  } catch (error: any)
+{
     console.error(`Detailed Firebase Error in getAllSessions:`, error);
     if (error.code === 'failed-precondition') {
       throw new Error(`Failed to fetch all sessions. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
     }
     throw new Error(`Failed to fetch all sessions. See server logs for details.`);
+  }
+}
+
+
+export async function getCompanyProfile(companyId: string): Promise<CompanyProfile | null> {
+  ensureFirebaseIsOperational();
+  try {
+    const companyDocRef = doc(db, 'companies', companyId);
+    const companySnap = await getDoc(companyDocRef);
+    if (companySnap.exists()) {
+      return companySnap.data() as CompanyProfile;
+    }
+    return null;
+  } catch (error: any) {
+    console.error(`[firestoreService] Error fetching company profile for companyId ${companyId}:`, error);
+    throw new Error(`Failed to fetch company profile.`);
+  }
+}
+
+export async function updateCompanyProfile(companyId: string, updates: Partial<CompanyProfile>): Promise<void> {
+  ensureFirebaseIsOperational();
+  try {
+    const companyDocRef = doc(db, 'companies', companyId);
+    await updateDoc(companyDocRef, updates);
+  } catch (error: any) {
+    console.error(`[firestoreService] Error updating company profile for companyId ${companyId}:`, error);
+    throw new Error(`Failed to update company profile.`);
   }
 }

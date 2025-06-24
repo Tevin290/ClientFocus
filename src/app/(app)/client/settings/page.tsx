@@ -6,9 +6,9 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { PageHeader } from "@/components/shared/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Save, TriangleAlert, Users } from 'lucide-react';
+import { Loader2, Save, TriangleAlert, Users, CreditCard, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getAllCoaches, updateUserProfile, type UserProfile } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
@@ -17,6 +17,8 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
+import { createCheckoutSetupSession } from '@/lib/stripeService';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const selectCoachSchema = z.object({
   coachId: z.string().min(1, 'Please select a coach.'),
@@ -26,15 +28,36 @@ type SelectCoachFormValues = z.infer<typeof selectCoachSchema>;
 
 export default function ClientSettingsPage() {
   const { toast } = useToast();
-  const { user, userProfile, isLoading: isRoleLoading, role, refetchUserProfile } = useRole();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, userProfile, companyProfile, isLoading: isRoleLoading, role, refetchUserProfile } = useRole();
+  
   const [isSaving, setIsSaving] = useState(false);
+  const [isRedirectingToStripe, setIsRedirectingToStripe] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
-  }, []);
+    if (searchParams.get('payment_setup_success')) {
+        toast({
+            title: "Payment Method Added!",
+            description: "Your payment method has been saved successfully.",
+            variant: "default",
+        });
+        refetchUserProfile(); // refetch to get latest stripeCustomerId
+        router.replace('/client/settings'); // remove query params
+    }
+    if (searchParams.get('payment_setup_cancelled')) {
+        toast({
+            title: "Payment Setup Cancelled",
+            description: "You can add a payment method at any time.",
+            variant: "destructive",
+        });
+        router.replace('/client/settings');
+    }
+  }, [searchParams, toast, refetchUserProfile, router]);
 
   const form = useForm<SelectCoachFormValues>({
     resolver: zodResolver(selectCoachSchema),
@@ -43,13 +66,11 @@ export default function ClientSettingsPage() {
     }
   });
 
-  // Effect to reset form when user profile is loaded/changed
   useEffect(() => {
     if (userProfile?.coachId) {
         form.reset({ coachId: userProfile.coachId });
     }
   }, [userProfile, form]);
-
 
   useEffect(() => {
     if (!firebaseAvailable || !userProfile?.companyId) {
@@ -59,7 +80,6 @@ export default function ClientSettingsPage() {
     const fetchCoaches = async () => {
       setIsFetchingCoaches(true);
       try {
-        // Fetch coaches only from the client's company
         const fetchedCoaches = await getAllCoaches(userProfile.companyId!);
         setCoaches(fetchedCoaches);
       } catch (error) {
@@ -72,7 +92,6 @@ export default function ClientSettingsPage() {
     fetchCoaches();
   }, [firebaseAvailable, toast, userProfile?.companyId]);
 
-
   const currentCoachName = useMemo(() => {
     return coaches.find(c => c.uid === userProfile?.coachId)?.displayName || "Not Assigned";
   }, [coaches, userProfile]);
@@ -82,17 +101,15 @@ export default function ClientSettingsPage() {
       toast({ title: "Operation Failed", description: "Cannot save settings. User not found or Firebase is unavailable.", variant: "destructive" });
       return;
     }
-
     setIsSaving(true);
     try {
       await updateUserProfile(user.uid, { coachId: data.coachId });
-      await refetchUserProfile(); // Refetch the user profile to update the UI
+      await refetchUserProfile();
       toast({
         title: "Coach Updated!",
         description: `Your coach has been successfully updated.`,
       });
     } catch (error: any) {
-      console.error("Error updating coach:", error);
       toast({
         title: "Update Failed",
         description: error.message || "Could not update your coach. Please try again.",
@@ -102,6 +119,24 @@ export default function ClientSettingsPage() {
       setIsSaving(false);
     }
   };
+
+  const handleAddPaymentMethod = async () => {
+    if (!companyProfile?.stripeAccountId || !user || !userProfile?.companyId) {
+        toast({ title: "Error", description: "Billing is not enabled for this company yet.", variant: "destructive" });
+        return;
+    }
+    setIsRedirectingToStripe(true);
+    try {
+        const { url, error } = await createCheckoutSetupSession(userProfile.companyId, companyProfile.stripeAccountId, user.uid, user.email!);
+        if (error || !url) {
+            throw new Error(error || 'Failed to create Stripe session.');
+        }
+        window.location.href = url;
+    } catch (err: any) {
+        toast({ title: "Could not connect to Stripe", description: err.message, variant: "destructive"});
+        setIsRedirectingToStripe(false);
+    }
+  }
 
   if (isRoleLoading) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -125,6 +160,44 @@ export default function ClientSettingsPage() {
       <PageHeader title="My Settings" description="Manage your coach assignment and profile details."/>
       <div className="space-y-8 mt-8">
         <ProfilePictureForm user={user} userProfile={userProfile} />
+
+        <Card className="w-full max-w-2xl shadow-light">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center">
+              <CreditCard className="mr-2 h-5 w-5 text-primary" />
+              Payment Method
+            </CardTitle>
+            <CardDescription>
+                {userProfile.stripeCustomerId ? "Your payment method is on file and can be managed via your coach." : "Add a payment method to allow for session billing."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {userProfile.stripeCustomerId ? (
+                 <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                    <div>
+                        <p className="font-semibold text-green-800 dark:text-green-200">Payment Method on File</p>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                           Your account is ready for billing.
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <Button onClick={handleAddPaymentMethod} disabled={isRedirectingToStripe || !companyProfile?.stripeAccountOnboarded}>
+                    {isRedirectingToStripe ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                        <CreditCard className="mr-2 h-4 w-4" />
+                    )}
+                    {isRedirectingToStripe ? 'Redirecting...' : 'Add Payment Method'}
+                </Button>
+            )}
+            {!companyProfile?.stripeAccountOnboarded && !userProfile.stripeCustomerId && (
+                <p className="text-xs text-muted-foreground mt-2">Your coach's company has not enabled billing yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="w-full max-w-2xl shadow-light">
           <CardHeader>
             <CardTitle className="font-headline flex items-center">
@@ -186,6 +259,7 @@ export default function ClientSettingsPage() {
             </Form>
           </CardContent>
         </Card>
+
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle, Archive, RotateCcw } from "lucide-react";
+import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle, Archive, RotateCcw, Building } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -15,11 +15,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useToast } from '@/hooks/use-toast';
 import { getAllSessionsForAdmin, updateSession, type Session } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
 import { isFirebaseConfigured } from '@/lib/firebase';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/components/ui/alert';
+import Link from 'next/link';
 
 type SessionStatus = 'Under Review' | 'Approved' | 'Denied' | 'Billed';
 
@@ -27,8 +38,9 @@ export default function AdminSessionReviewPage() {
   const { toast } = useToast();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { role, userProfile, isLoading: isRoleLoading } = useRole();
+  const { role, userProfile, companyProfile, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+  const [showStripePrompt, setShowStripePrompt] = useState(false);
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
@@ -67,11 +79,16 @@ export default function AdminSessionReviewPage() {
       toast({ title: "Operation Failed", description: "Firebase is not configured.", variant: "destructive" });
       return;
     }
+
+    // Intercept billing action if Stripe is not connected
+    if (newStatus === 'Billed' && !companyProfile?.stripeAccountOnboarded) {
+      setShowStripePrompt(true);
+      return;
+    }
+
     try {
       await updateSession(sessionId, { status: newStatus });
       
-      // If admin approves, it goes to super-admin, so remove from view.
-      // Otherwise, update the status in place.
       if (role === 'admin' && newStatus === 'Approved') {
          setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
          toast({
@@ -93,11 +110,9 @@ export default function AdminSessionReviewPage() {
   };
 
   const handleDismiss = async (sessionId: string) => {
-    // Optimistically update the UI for a snappy user experience
     setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
     
     try {
-      // Persist the change in Firestore
       await updateSession(sessionId, { isArchived: true });
       toast({
         title: 'Session Dismissed',
@@ -106,7 +121,6 @@ export default function AdminSessionReviewPage() {
     } catch (error) {
       console.error(`Error dismissing/archiving session ${sessionId}:`, error);
       toast({ title: "Archive Failed", description: "Could not archive the session. It may reappear on refresh.", variant: "destructive" });
-      // In a more complex app, you might want to add the session back to the list here to reflect the failed state
     }
   };
   
@@ -143,7 +157,7 @@ export default function AdminSessionReviewPage() {
         <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
         <Alert variant="destructive">
             <TriangleAlert className="h-4 w-4" />
-            <AlertTitle>Access Denied</AlertTitle>
+            <UiAlertTitle>Access Denied</UiAlertTitle>
             <AlertDescription>You must be an admin to view this page.</AlertDescription>
         </Alert>
       </div>
@@ -156,7 +170,7 @@ export default function AdminSessionReviewPage() {
         <PageHeader title="Session Review" description="Approve submitted sessions and manage billing." />
         <Alert variant="destructive" className="shadow-light">
           <TriangleAlert className="h-5 w-5" />
-          <AlertTitle className="font-headline">Feature Unavailable</AlertTitle>
+          <UiAlertTitle className="font-headline">Feature Unavailable</UiAlertTitle>
           <AlertDescription>
             Firebase is not configured. Session data cannot be loaded. Please contact support or the administrator.
           </AlertDescription>
@@ -216,7 +230,6 @@ export default function AdminSessionReviewPage() {
                         <FileText className="h-4 w-4" />
                       </Button>
                       
-                      {/* Admin Actions */}
                       {role === 'admin' && (
                         <>
                           {session.status === 'Under Review' && (
@@ -242,7 +255,6 @@ export default function AdminSessionReviewPage() {
                         </>
                       )}
                       
-                      {/* Super Admin Actions */}
                       {role === 'super-admin' && (
                          <>
                           {session.status === 'Approved' && (
@@ -276,6 +288,30 @@ export default function AdminSessionReviewPage() {
             </p>
           </CardFooter>
       </Card>
+      
+      <AlertDialog open={showStripePrompt} onOpenChange={setShowStripePrompt}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-yellow-500"/>
+              Stripe Account Not Connected
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              To bill clients for sessions, you must first connect your company's Stripe account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Link href="/admin/billing">
+                <Building className="mr-2 h-4 w-4" />
+                Go to Billing Settings
+              </Link>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

@@ -6,11 +6,10 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { PageHeader } from "@/components/shared/page-header";
-import { StripeSettingsForm } from "@/components/forms/stripe-settings-form";
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Database, Loader2, TriangleAlert, Building } from 'lucide-react';
+import { Database, Loader2, TriangleAlert, Building, Switch as SwitchIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateDummyDataForCoach } from '@/lib/dummyDataService';
 import { getAllCoaches, type UserProfile } from '@/lib/firestoreService';
@@ -21,6 +20,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { migrateDataToCompany } from '@/lib/migrationService';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,13 +47,25 @@ export default function AdminSettingsPage() {
   const [isMigrating, setIsMigrating] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
+  const [isTestMode, setIsTestMode] = useState(true);
   const { toast } = useToast();
   const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
+    const savedMode = localStorage.getItem('stripe_test_mode');
+    setIsTestMode(savedMode === null || savedMode === 'true');
   }, []);
+
+  const handleTestModeChange = (checked: boolean) => {
+    setIsTestMode(checked);
+    localStorage.setItem('stripe_test_mode', String(checked));
+    toast({
+        title: `Stripe mode changed`,
+        description: `Stripe is now in ${checked ? 'Test' : 'Live'} mode.`,
+    });
+  };
 
   const form = useForm<SelectCoachFormValues>({
     resolver: zodResolver(selectCoachSchema),
@@ -63,7 +77,6 @@ export default function AdminSettingsPage() {
       return;
     }
 
-    // Ensure we have the user profile and their companyId before fetching
     if (userProfile?.companyId) {
       const fetchCoaches = async () => {
         setIsFetchingCoaches(true);
@@ -79,7 +92,6 @@ export default function AdminSettingsPage() {
       };
       fetchCoaches();
     } else if (!isRoleLoading) {
-      // If role is loaded but we still don't have a companyId
       setIsFetchingCoaches(false);
       if (role === 'admin' || role === 'super-admin') {
         toast({ title: "Warning", description: "Could not determine your company to fetch coaches.", variant: "destructive" });
@@ -133,25 +145,20 @@ export default function AdminSettingsPage() {
   };
 
   const runMigration = async () => {
-    console.log("[Migration] User confirmed migration.");
     if (!firebaseAvailable) {
       toast({ title: "Operation Failed", description: "Firebase is not configured.", variant: "destructive" });
-      console.log("[Migration] Aborted: Firebase not available.");
       return;
     }
     
     setIsMigrating(true);
     try {
-        console.log("[Migration] Calling migrateDataToCompany server action...");
         const result = await migrateDataToCompany({ id: 'hearts-and-minds', name: 'Hearts & Minds' });
-        console.log("[Migration] Server action successful. Result:", result);
         toast({
             title: "Migration Complete",
             description: `Assigned ${result.usersUpdated} users and ${result.sessionsUpdated} sessions to Hearts & Minds.`,
             duration: 7000,
         });
     } catch (error: any) {
-        console.error("[Migration] Server action failed:", error);
         toast({
             title: "Migration Failed",
             description: error.message || "An unexpected error occurred. Check the console.",
@@ -159,7 +166,6 @@ export default function AdminSettingsPage() {
             duration: 9000,
         });
     } finally {
-        console.log("[Migration] Finished. Setting isMigrating to false.");
         setIsMigrating(false);
     }
   };
@@ -184,10 +190,38 @@ export default function AdminSettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Application Settings" description="Manage integrations and platform configurations."/>
+      <PageHeader title="Application Settings" description="Manage your profile and platform configurations."/>
       <div className="space-y-8 mt-8">
         <ProfilePictureForm user={user} userProfile={userProfile} />
-        <StripeSettingsForm />
+
+        <Card className="w-full max-w-2xl shadow-light">
+            <CardHeader>
+                <CardTitle className="font-headline flex items-center">
+                    <SwitchIcon className="mr-2 h-5 w-5 text-primary"/>
+                    Stripe Mode
+                </CardTitle>
+                 <CardDescription>
+                    Toggle between Stripe's test and live environments. This affects all billing operations.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center space-x-2">
+                     <Switch
+                      id="stripe-test-mode"
+                      checked={isTestMode}
+                      onCheckedChange={handleTestModeChange}
+                      className={isTestMode ? 'animate-glow-pulse' : ''}
+                      aria-label="Stripe Test Mode"
+                    />
+                    <Label htmlFor="stripe-test-mode" className="font-medium">
+                      {isTestMode ? 'Test Mode Enabled' : 'Live Mode Enabled'}
+                    </Label>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                    {isTestMode ? 'You are currently using Stripe test keys. No real charges will be made.' : 'You are in live mode. Real charges will be processed.'}
+                </p>
+            </CardContent>
+        </Card>
 
         <Card className="shadow-light">
           <CardHeader>
@@ -210,7 +244,6 @@ export default function AdminSettingsPage() {
                 <h4 className="font-medium text-foreground">Generate Dummy Data</h4>
                 <p className="text-sm text-muted-foreground">
                   Select a coach from the dropdown below to generate sample clients and session data for them.
-                  This is useful for demonstrating the coach's dashboard and client list features without affecting real client data.
                 </p>
                 <FormField
                   control={form.control}
