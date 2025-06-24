@@ -26,23 +26,18 @@ let storage: FirebaseStorage;
 // let analytics: Analytics | undefined; // Optional
 
 if (getApps().length === 0) {
-  if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY" || firebaseConfig.apiKey === "AIzaSyBhe_SSyUTFo5Qvx3wUE6Hxo9GDMVPGcAw" && process.env.NEXT_PUBLIC_FIREBASE_API_KEY === undefined) {
-    if (firebaseConfig.apiKey === "YOUR_API_KEY_PLACEHOLDER_IF_IT_WAS_DIFFERENT") { 
-         console.warn(
-            "Firebase is not configured. Please add your Firebase config to src/lib/firebase.ts or environment variables."
-         );
-    }
-  }
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
 
-  // Set auth persistence to session-only
-  setPersistence(auth, browserSessionPersistence)
-    .catch((error) => {
-      console.error("Firebase Auth: Error setting persistence to session-only.", error);
-    });
+  // Set auth persistence to session-only, only in the browser
+  if (typeof window !== 'undefined') {
+    setPersistence(auth, browserSessionPersistence)
+      .catch((error) => {
+        console.error("Firebase Auth: Error setting persistence to session-only.", error);
+      });
+  }
 
   // if (typeof window !== 'undefined' && firebaseConfig.measurementId && firebaseConfig.measurementId !== "YOUR_MEASUREMENT_ID") {
   //   analytics = getAnalytics(app);
@@ -57,7 +52,14 @@ if (getApps().length === 0) {
 export { app, auth, db, storage };
 // export { app, auth, db, analytics }; // If using analytics
 
+/**
+ * Checks if the Firebase configuration has been replaced with actual values.
+ * @returns {boolean} True if Firebase seems to be configured, false otherwise.
+ */
 export const isFirebaseConfigured = () => {
-  const isDefaultKey = firebaseConfig.apiKey?.startsWith('AIza');
-  return !isDefaultKey && firebaseConfig.projectId !== "YOUR_PROJECT_ID";
+  // A simple check to see if the placeholder values are still present.
+  return (
+    firebaseConfig.apiKey !== "YOUR_API_KEY" &&
+    firebaseConfig.projectId !== "YOUR_PROJECT_ID"
+  );
 };
