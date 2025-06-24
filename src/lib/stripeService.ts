@@ -5,7 +5,6 @@ import Stripe from 'stripe';
 import { headers } from 'next/headers';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { updateCompanyProfile, updateUserProfile } from './firestoreService';
 import { getStripeSecretKey } from './stripe';
 
 /**
@@ -17,12 +16,13 @@ export async function createConnectAccountLink(
     companyName: string,
     mode: 'test' | 'live',
     stripeAccountId?: string
-): Promise<{ url: string | null; error?: string }> {
+): Promise<{ url: string | null; newAccountId?: string; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
     
     let finalStripeAccountId = stripeAccountId;
+    let newAccountId: string | undefined = undefined;
 
     if (!finalStripeAccountId) {
       console.log(`[Stripe Service] No stripeAccountId provided for company ${companyId}. Creating a new one.`);
@@ -36,7 +36,7 @@ export async function createConnectAccountLink(
         },
       });
       finalStripeAccountId = account.id;
-      await updateCompanyProfile(companyId, { stripeAccountId: finalStripeAccountId });
+      newAccountId = account.id;
     }
 
     if (!finalStripeAccountId) {
@@ -50,13 +50,10 @@ export async function createConnectAccountLink(
       type: 'account_onboarding',
     });
 
-    return { url: accountLink.url };
+    return { url: accountLink.url, newAccountId };
 
   } catch (error: any) {
     console.error('[Stripe Service] Error creating Connect account link:', error);
-    if (String(error.message).includes('permission-denied')) {
-        return { url: null, error: 'Database permission denied. Cannot save new Stripe account. Check Firestore rules.' };
-    }
     return { url: null, error: error.message || 'Failed to create Stripe connection link.' };
   }
 }
@@ -71,19 +68,15 @@ export async function createCheckoutSetupSession(
   stripeAccountId: string,
   clientId: string,
   clientEmail: string,
+  existingStripeCustomerId: string | undefined,
   mode: 'test' | 'live'
-): Promise<{ url: string | null; error?: string }> {
+): Promise<{ url: string | null; newStripeCustomerId?: string; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
 
-    const userRef = doc(db, 'users', clientId);
-    const userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) {
-      throw new Error('Client user profile not found.');
-    }
-
-    let { stripeCustomerId } = userSnap.data();
+    let stripeCustomerId = existingStripeCustomerId;
+    let newStripeCustomerId: string | undefined = undefined;
 
     // Create a Stripe Customer if one doesn't exist for this client in the connected account
     if (!stripeCustomerId) {
@@ -94,7 +87,7 @@ export async function createCheckoutSetupSession(
         stripeAccount: stripeAccountId,
       });
       stripeCustomerId = customer.id;
-      await updateUserProfile(clientId, { stripeCustomerId });
+      newStripeCustomerId = customer.id;
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -107,7 +100,7 @@ export async function createCheckoutSetupSession(
         stripeAccount: stripeAccountId,
     });
 
-    return { url: session.url };
+    return { url: session.url, newStripeCustomerId };
 
   } catch (error: any) {
     console.error('[Stripe Service] Error creating Checkout setup session:', error);

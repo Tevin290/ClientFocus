@@ -131,16 +131,24 @@ export default function ClientSettingsPage() {
     }
     setIsRedirectingToStripe(true);
     try {
-        const { url, error } = await createCheckoutSetupSession(
+        const { url, newStripeCustomerId, error } = await createCheckoutSetupSession(
           userProfile.companyId, 
           companyProfile.stripeAccountId, 
           user.uid, 
           user.email!,
-          stripeMode // Pass the current mode
+          userProfile.stripeCustomerId, // Pass existing customer ID, if any
+          stripeMode
         );
+
         if (error || !url) {
             throw new Error(error || 'Failed to create Stripe session.');
         }
+
+        // If a new customer was created in Stripe, save the ID to the user's profile before redirecting
+        if (newStripeCustomerId) {
+            await updateUserProfile(user.uid, { stripeCustomerId: newStripeCustomerId });
+        }
+
         window.location.href = url;
     } catch (err: any) {
         toast({ title: "Could not connect to Stripe", description: err.message, variant: "destructive"});

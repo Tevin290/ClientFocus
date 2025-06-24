@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { createConnectAccountLink } from '@/lib/stripeService';
 import { getStripeMode } from '@/lib/stripeClient';
 import type { CompanyProfile } from '@/lib/firestoreService';
+import { updateCompanyProfile } from '@/lib/firestoreService';
+import { useRole } from '@/context/role-context';
 
 interface StripeConnectFormProps {
   companyProfile: CompanyProfile;
@@ -16,6 +18,7 @@ interface StripeConnectFormProps {
 
 export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
   const { toast } = useToast();
+  const { refetchCompanyProfile } = useRole();
   const [isConnecting, setIsConnecting] = useState(false);
   const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
 
@@ -26,17 +29,26 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
   const handleConnect = async () => {
     setIsConnecting(true);
     try {
-      const { url, error } = await createConnectAccountLink(
-        companyProfile.id, 
+      const { url, newAccountId, error } = await createConnectAccountLink(
+        companyProfile.id,
         companyProfile.name,
         stripeMode,
         companyProfile.stripeAccountId
       );
+
       if (error || !url) {
         throw new Error(error || 'Failed to get Stripe connection URL.');
       }
-      // Redirect user to Stripe to connect their account
+
+      // If a new Stripe account was created on the server, save its ID to Firestore now from the client.
+      if (newAccountId) {
+        await updateCompanyProfile(companyProfile.id, { stripeAccountId: newAccountId });
+        await refetchCompanyProfile(); // Ensure the local state is updated
+      }
+
+      // Redirect user to Stripe to complete the onboarding process.
       window.location.href = url;
+
     } catch (err: any) {
       console.error('Failed to connect Stripe account:', err);
       toast({
