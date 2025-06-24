@@ -256,7 +256,7 @@ export default function SignupPage() {
             <Building className="h-12 w-12 text-primary transition-transform duration-300 ease-in-out hover:scale-110" />
           </Link>
           <CardTitle className="text-3xl font-headline font-bold text-foreground tracking-tight">
-            Create Your SessionSync Account
+            Create Your ClientFocus Account
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2 text-base">
             Join our platform to streamline your coaching and client management.

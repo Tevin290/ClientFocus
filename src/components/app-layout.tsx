@@ -78,7 +78,7 @@ const navItems: NavItem[] = [
 const AppLogo = () => (
   <Link href="/" className="flex items-center gap-2 px-2 min-h-[4rem]">
     <LifeBuoy className="h-8 w-8 text-primary" />
-    <h1 className="text-xl font-bold font-headline text-foreground">SessionSync</h1>
+    <h1 className="text-xl font-bold font-headline text-foreground">ClientFocus</h1>
   </Link>
 );
 
@@ -121,7 +121,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // --- Defensive User Display Logic ---
   let avatarFallback = 'U';
   let avatarAltText = 'User';
-  let userDisplayName = 'SessionSync User';
+  let userDisplayName = 'ClientFocus User';
   let userEmailLine: string = 'No Role';
 
   if (isRoleLoading) {

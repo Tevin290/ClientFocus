@@ -94,7 +94,7 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <LifeBuoy className="h-16 w-16 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-headline">Welcome to SessionSync</CardTitle>
+          <CardTitle className="text-3xl font-headline">Welcome to ClientFocus</CardTitle>
           <CardDescription className="text-md">Enter your credentials to log in</CardDescription>
           {firebaseNotConfigured && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive text-sm rounded-md flex items-center gap-2">

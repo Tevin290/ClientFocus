@@ -202,7 +202,7 @@ export default function AdminSettingsPage() {
                     Stripe Platform Mode
                 </CardTitle>
                  <CardDescription>
-                    This is a global, developer-level setting. It controls whether the entire SessionSync platform uses Stripe's test environment or live environment for all companies.
+                    This is a global, developer-level setting. It controls whether the entire ClientFocus platform uses Stripe's test environment or live environment for all companies.
                 </CardDescription>
             </CardHeader>
             <CardContent>

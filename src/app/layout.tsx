@@ -11,7 +11,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: 'SessionSync',
+  title: 'ClientFocus',
   description: 'Streamline your coaching sessions and client management.',
 };
 

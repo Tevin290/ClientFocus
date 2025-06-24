@@ -1,7 +1,7 @@
 
-# SessionSync
+# ClientFocus
 
-Streamline your coaching sessions and client management with SessionSync. This Next.js application leverages Firebase for backend services (Auth, Firestore) and Genkit for AI-powered features.
+Streamline your coaching sessions and client management with ClientFocus. This Next.js application leverages Firebase for backend services (Auth, Firestore) and Genkit for AI-powered features.
 
 ## Core Features:
 
