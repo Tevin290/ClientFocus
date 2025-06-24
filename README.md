@@ -154,6 +154,26 @@ After deploying the updated code and Firestore rules:
     ```
     Or follow your hosting provider's specific deployment instructions.
 
+## Troubleshooting
+
+### Profile Picture Upload Fails (CORS Error)
+
+If you encounter a CORS error in the browser console when trying to upload a profile picture, it means your Cloud Storage bucket needs to be configured to accept requests from your web app's domain.
+
+This is a one-time setup that must be done from the command line.
+
+1.  **Open the Terminal** in Firebase Studio.
+2.  **Set the correct project** by running this command:
+    ```bash
+    gcloud config set project sessionsync-wbo8u
+    ```
+3.  **Apply the CORS configuration** by running the following command, which uses the correct bucket name for your project:
+    ```bash
+    gcloud storage buckets update gs://sessionsync-wbo8u.firebasestorage.app --cors-file=cors.json
+    ```
+
+This should resolve the upload issue permanently.
+
 ## Genkit (AI Features)
 
 To run Genkit flows locally for development (e.g., for `summarizeSessionNotes`):
