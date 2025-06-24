@@ -1,14 +1,98 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // WARNING: TEMPORARY INSECURE RULES FOR DATA MIGRATION
-    // These rules allow anyone to read and write to your entire database.
-    // This is necessary for the one-time server-side migration script to run.
-    // After the migration is complete, you MUST revert to the secure rules.
-    match /{document=**} {
-      allow read, write: if true;
+    // --- Helper Functions ---
+    function getUserData() {
+      // Get the profile document of the user making the request.
+      // This is used to check their role and companyId.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSignedIn() {
+      // Check if the user is authenticated.
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      // Check if the requesting user is the owner of the document.
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function userRole() {
+      // Convenience function to get the role of the requesting user.
+      return getUserData().role;
+    }
+    
+    function userCompany() {
+      // Convenience function to get the companyId of the requesting user.
+      return getUserData().companyId;
+    }
+
+    // --- Company Rules ---
+    match /companies/{companyId} {
+      // A user can read their own company's document.
+      allow get: if isSignedIn() && userCompany() == companyId;
+      
+      // Only admins of the company can update its details.
+      allow update: if isSignedIn() && userCompany() == companyId && userRole() in ['admin', 'super-admin'];
+      
+      // Creating/deleting companies should be an admin action on the backend, not from the client.
+      allow create, delete: if false;
+      
+      // Listing companies is disallowed for now.
+      allow list: if false;
+    }
+
+    // --- User Profile Rules ---
+    match /users/{userId} {
+      // A user can create their own profile during signup.
+      allow create: if isUser(userId);
+
+      // A user can read their own profile.
+      // An admin or coach can read any user profile within the same company.
+      // This rule also secures 'list' queries, as they must satisfy this condition for every document returned.
+      // This forces client-side queries to include `where('companyId', '==', user.companyId)`.
+      allow read: if isUser(userId) || (isSignedIn() && userCompany() == resource.data.companyId && userRole() in ['admin', 'super-admin', 'coach']);
+
+      // A user can update their own profile. Admins can update users in their company.
+      allow update: if isUser(userId) || (isSignedIn() && userCompany() == resource.data.companyId && userRole() in ['admin', 'super-admin']);
+      
+      // Only admins can delete users within their company.
+      allow delete: if isSignedIn() && userCompany() == resource.data.companyId && userRole() in ['admin', 'super-admin'];
+    }
+
+    // --- Session Rules ---
+    match /sessions/{sessionId} {
+      function isSessionAdmin() {
+        // Checks if the user is an admin of the company the session belongs to.
+        return userCompany() == resource.data.companyId && userRole() in ['admin', 'super-admin'];
+      }
+
+      function isSessionCoach() {
+        // Checks if the user is the coach for this specific session.
+        return request.auth.uid == resource.data.coachId;
+      }
+
+      function isSessionClient() {
+        // Checks if the user is the client for this specific session.
+        return request.auth.uid == resource.data.clientId;
+      }
+      
+      // Reading is allowed if you are an admin of the company, or the specific coach/client for the session.
+      // This also secures list queries by companyId.
+      allow read: if isSignedIn() && userCompany() == resource.data.companyId && (isSessionAdmin() || isSessionCoach() || isSessionClient());
+      
+      // A coach can create a session, as long as they are creating it within their own company.
+      allow create: if isSignedIn() && userRole() == 'coach' && userCompany() == request.resource.data.companyId;
+
+      // Only the session's coach or a company admin can update it.
+      allow update: if isSignedIn() && userCompany() == resource.data.companyId && (isSessionAdmin() || isSessionCoach());
+      
+      // Only a company admin can delete sessions.
+      allow delete: if isSignedIn() && isSessionAdmin();
     }
   }
 }
