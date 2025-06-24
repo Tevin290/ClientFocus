@@ -31,6 +31,7 @@ import { useRole } from '@/context/role-context';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/components/ui/alert';
 import Link from 'next/link';
+import { getStripeMode } from '@/lib/stripeClient';
 
 type SessionStatus = 'Under Review' | 'Approved' | 'Denied' | 'Billed';
 
@@ -41,9 +42,11 @@ export default function AdminSessionReviewPage() {
   const { role, userProfile, companyProfile, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
   const [showStripePrompt, setShowStripePrompt] = useState(false);
+  const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
+    setStripeMode(getStripeMode());
   }, []);
 
   useEffect(() => {
@@ -80,8 +83,9 @@ export default function AdminSessionReviewPage() {
       return;
     }
 
-    // Intercept billing action if Stripe is not connected
-    if (newStatus === 'Billed' && !companyProfile?.stripeAccountOnboarded) {
+    const isStripeOnboarded = stripeMode === 'test' ? companyProfile?.stripeAccountOnboarded_test : companyProfile?.stripeAccountOnboarded_live;
+
+    if (newStatus === 'Billed' && !isStripeOnboarded) {
       setShowStripePrompt(true);
       return;
     }
@@ -180,7 +184,7 @@ export default function AdminSessionReviewPage() {
   }
 
   const pageTitle = role === 'super-admin' ? "Billing Review" : "Session Approval";
-  const pageDescription = role === 'super-admin' ? "Review approved sessions that are ready for billing." : "Approve or deny newly submitted coaching sessions.";
+  const pageDescription = role === 'super-admin' ? `Review approved sessions that are ready for billing in ${stripeMode} mode.` : "Approve or deny newly submitted coaching sessions.";
 
 
   return (
@@ -294,10 +298,10 @@ export default function AdminSessionReviewPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <TriangleAlert className="h-5 w-5 text-yellow-500"/>
-              Stripe Account Not Connected
+              Stripe Account Not Ready
             </AlertDialogTitle>
             <AlertDialogDescription>
-              To bill clients for sessions, you must first connect your company's Stripe account.
+              To bill clients in {stripeMode} mode, you must first connect and fully onboard your company's Stripe account for that mode. Please go to the billing settings to complete this step.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

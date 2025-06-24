@@ -23,29 +23,30 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
   const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
 
   useEffect(() => {
-    setStripeMode(getStripeMode()); // Get mode from localStorage on mount
+    setStripeMode(getStripeMode());
   }, []);
 
   const handleConnect = async () => {
     setIsConnecting(true);
     try {
+      const accountIdField = stripeMode === 'test' ? 'stripeAccountId_test' : 'stripeAccountId_live';
+      const existingAccountId = companyProfile[accountIdField];
+
       const { url, newAccountId, error } = await createConnectAccountLink(
         companyProfile.name,
         stripeMode,
-        companyProfile.stripeAccountId
+        existingAccountId
       );
 
       if (error || !url) {
         throw new Error(error || 'Failed to get Stripe connection URL.');
       }
 
-      // If a new Stripe account was created on the server, save its ID to Firestore now from the client.
-      if (newAccountId && newAccountId !== companyProfile.stripeAccountId) {
-        await updateCompanyProfile(companyProfile.id, { stripeAccountId: newAccountId });
-        await refetchCompanyProfile(); // Ensure the local state is updated
+      if (newAccountId && newAccountId !== existingAccountId) {
+        await updateCompanyProfile(companyProfile.id, { [accountIdField]: newAccountId });
+        await refetchCompanyProfile(); 
       }
 
-      // Redirect user to Stripe to complete the onboarding process.
       window.location.href = url;
 
     } catch (err: any) {
@@ -59,29 +60,31 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
     }
   };
 
-  const stripeDashboardUrl = `https://dashboard.stripe.com/${stripeMode === 'test' ? 'test/' : ''}accounts/${companyProfile.stripeAccountId}`;
+  const accountId = stripeMode === 'test' ? companyProfile.stripeAccountId_test : companyProfile.stripeAccountId_live;
+  const isAccountOnboarded = stripeMode === 'test' ? companyProfile.stripeAccountOnboarded_test : companyProfile.stripeAccountOnboarded_live;
   
-  const isContinuingOnboarding = companyProfile.stripeAccountId && !companyProfile.stripeAccountOnboarded;
+  const stripeDashboardUrl = `https://dashboard.stripe.com/${stripeMode === 'test' ? 'test/' : ''}accounts/${accountId}`;
+  const isContinuingOnboarding = accountId && !isAccountOnboarded;
 
   return (
     <Card className="w-full max-w-2xl shadow-light">
       <CardHeader>
-        <CardTitle className="font-headline">Stripe Integration</CardTitle>
+        <CardTitle className="font-headline">Stripe Integration ({stripeMode} mode)</CardTitle>
         <CardDescription>
-          {companyProfile.stripeAccountOnboarded
-            ? 'Your account is connected to Stripe. You can now bill clients.'
-            : 'Connect your Stripe account to enable client billing and manage payments.'}
+          {isAccountOnboarded
+            ? `Your account is connected to Stripe in ${stripeMode} mode.`
+            : `Connect your Stripe account for ${stripeMode} mode to enable client billing.`}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {companyProfile.stripeAccountOnboarded ? (
+        {isAccountOnboarded ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
               <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
               <div>
-                <p className="font-semibold text-green-800 dark:text-green-200">Stripe Account Connected</p>
+                <p className="font-semibold text-green-800 dark:text-green-200">Stripe Account Connected ({stripeMode})</p>
                 <p className="text-sm text-green-700 dark:text-green-300">
-                  Account ID: <code className="text-xs">{companyProfile.stripeAccountId}</code>
+                  Account ID: <code className="text-xs">{accountId}</code>
                 </p>
               </div>
             </div>
@@ -99,7 +102,7 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
                     <div>
                         <p className="font-semibold text-yellow-800 dark:text-yellow-200">Onboarding Incomplete</p>
                         <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                            Please complete the Stripe onboarding process to activate your account for billing.
+                            Please complete the Stripe onboarding process to activate your account for billing in {stripeMode} mode.
                         </p>
                     </div>
                 </div>

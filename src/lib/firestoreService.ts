@@ -27,7 +27,8 @@ export interface UserProfile {
   createdAt: Timestamp | FieldValue; // Allow for FieldValue on create
   updatedAt?: Timestamp | FieldValue;
   coachId?: string;
-  stripeCustomerId?: string;
+  stripeCustomerId_test?: string;
+  stripeCustomerId_live?: string;
   companyId?: string;
 }
 
@@ -35,8 +36,10 @@ export interface CompanyProfile {
     id: string;
     name: string;
     createdAt: Timestamp;
-    stripeAccountId?: string;
-    stripeAccountOnboarded?: boolean;
+    stripeAccountId_test?: string;
+    stripeAccountOnboarded_test?: boolean;
+    stripeAccountId_live?: string;
+    stripeAccountOnboarded_live?: boolean;
 }
 
 export interface NewSessionData {
@@ -99,7 +102,8 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
         photoURL: data.photoURL || null,
         createdAt: createdAtTimestamp,
         coachId: data.coachId || undefined,
-        stripeCustomerId: data.stripeCustomerId || undefined,
+        stripeCustomerId_test: data.stripeCustomerId_test || undefined,
+        stripeCustomerId_live: data.stripeCustomerId_live || undefined,
         companyId: data.companyId || undefined,
       };
       return profile;

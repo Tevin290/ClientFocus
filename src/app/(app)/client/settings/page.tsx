@@ -42,7 +42,7 @@ export default function ClientSettingsPage() {
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
-    setStripeMode(getStripeMode()); // Get mode from localStorage
+    setStripeMode(getStripeMode());
 
     if (searchParams.get('payment_setup_success')) {
         toast({
@@ -50,8 +50,8 @@ export default function ClientSettingsPage() {
             description: "Your payment method has been saved successfully.",
             variant: "default",
         });
-        refetchUserProfile(); // refetch to get latest stripeCustomerId
-        router.replace('/client/settings'); // remove query params
+        refetchUserProfile();
+        router.replace('/client/settings');
     }
     if (searchParams.get('payment_setup_cancelled')) {
         toast({
@@ -124,19 +124,24 @@ export default function ClientSettingsPage() {
     }
   };
 
+  const companyStripeAccountId = stripeMode === 'test' ? companyProfile?.stripeAccountId_test : companyProfile?.stripeAccountId_live;
+  const isCompanyOnboarded = stripeMode === 'test' ? companyProfile?.stripeAccountOnboarded_test : companyProfile?.stripeAccountOnboarded_live;
+  const clientStripeCustomerId = stripeMode === 'test' ? userProfile?.stripeCustomerId_test : userProfile?.stripeCustomerId_live;
+  const clientStripeCustomerIdField = stripeMode === 'test' ? 'stripeCustomerId_test' : 'stripeCustomerId_live';
+
   const handleAddPaymentMethod = async () => {
-    if (!companyProfile?.stripeAccountId || !user || !userProfile?.companyId) {
-        toast({ title: "Error", description: "Billing is not enabled for this company yet.", variant: "destructive" });
+    if (!companyStripeAccountId || !user || !userProfile?.companyId) {
+        toast({ title: "Error", description: `Billing is not enabled for this company in ${stripeMode} mode.`, variant: "destructive" });
         return;
     }
     setIsRedirectingToStripe(true);
     try {
         const { url, newStripeCustomerId, error } = await createCheckoutSetupSession(
           userProfile.companyId, 
-          companyProfile.stripeAccountId, 
+          companyStripeAccountId, 
           user.uid, 
           user.email!,
-          userProfile.stripeCustomerId, // Pass existing customer ID, if any
+          clientStripeCustomerId,
           stripeMode
         );
 
@@ -144,9 +149,8 @@ export default function ClientSettingsPage() {
             throw new Error(error || 'Failed to create Stripe session.');
         }
 
-        // If a new customer was created in Stripe, save the ID to the user's profile before redirecting
         if (newStripeCustomerId) {
-            await updateUserProfile(user.uid, { stripeCustomerId: newStripeCustomerId });
+            await updateUserProfile(user.uid, { [clientStripeCustomerIdField]: newStripeCustomerId });
         }
 
         window.location.href = url;
@@ -183,25 +187,25 @@ export default function ClientSettingsPage() {
           <CardHeader>
             <CardTitle className="font-headline flex items-center">
               <CreditCard className="mr-2 h-5 w-5 text-primary" />
-              Payment Method
+              Payment Method ({stripeMode} mode)
             </CardTitle>
             <CardDescription>
-                {userProfile.stripeCustomerId ? "Your payment method is on file and can be managed via your coach." : "Add a payment method to allow for session billing."}
+                {clientStripeCustomerId ? `Your payment method for ${stripeMode} mode is on file.` : `Add a payment method to allow for session billing in ${stripeMode} mode.`}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {userProfile.stripeCustomerId ? (
+            {clientStripeCustomerId ? (
                  <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
                     <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
                     <div>
                         <p className="font-semibold text-green-800 dark:text-green-200">Payment Method on File</p>
                         <p className="text-sm text-green-700 dark:text-green-300">
-                           Your account is ready for billing.
+                           Your account is ready for billing in {stripeMode} mode.
                         </p>
                     </div>
                 </div>
             ) : (
-                <Button onClick={handleAddPaymentMethod} disabled={isRedirectingToStripe || !companyProfile?.stripeAccountOnboarded}>
+                <Button onClick={handleAddPaymentMethod} disabled={isRedirectingToStripe || !isCompanyOnboarded}>
                     {isRedirectingToStripe ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -210,8 +214,8 @@ export default function ClientSettingsPage() {
                     {isRedirectingToStripe ? 'Redirecting...' : 'Add Payment Method'}
                 </Button>
             )}
-            {!companyProfile?.stripeAccountOnboarded && !userProfile.stripeCustomerId && (
-                <p className="text-xs text-muted-foreground mt-2">Your coach's company has not enabled billing yet.</p>
+            {!isCompanyOnboarded && !clientStripeCustomerId && (
+                <p className="text-xs text-muted-foreground mt-2">Your coach's company has not enabled billing in {stripeMode} mode yet.</p>
             )}
           </CardContent>
         </Card>
@@ -282,5 +286,3 @@ export default function ClientSettingsPage() {
     </div>
   );
 }
-
-    
