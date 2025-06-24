@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Database, Loader2, TriangleAlert, Building, Switch as SwitchIcon } from 'lucide-react';
+import { Database, Loader2, TriangleAlert, Building, ToggleRight as SwitchIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateDummyDataForCoach } from '@/lib/dummyDataService';
 import { getAllCoaches, type UserProfile } from '@/lib/firestoreService';
