@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -32,8 +33,8 @@ export default function ClientSessionsPage() {
   }, []);
 
   useEffect(() => {
-    if (isRoleLoading || !clientId || !firebaseAvailable || !coachProfile) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !clientId || !firebaseAvailable || !coachProfile?.companyId) {
+      if (!isRoleLoading && (!firebaseAvailable || !coachProfile?.companyId)) setIsLoading(false);
       return;
     };
     
@@ -42,7 +43,7 @@ export default function ClientSessionsPage() {
       try {
         const [clientProfile, clientSessions] = await Promise.all([
           getUserProfile(clientId),
-          getClientSessionsForCoach(clientId, coachProfile.uid)
+          getClientSessionsForCoach(clientId, coachProfile.uid, coachProfile.companyId)
         ]);
 
         // --- VALIDATION STEP ---
