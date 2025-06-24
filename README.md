@@ -51,11 +51,15 @@ Streamline your coaching sessions and client management with SessionSync. This N
         - Go to the **Developers** section.
         - Under **API keys**, find your **Secret key**. Use the "Test mode" key for development.
     - **Step 2: Create a Webhook:**
-        - Under **Developers**, go to **Webhooks**.
+        - In the **Developers** section, go to **Webhooks**.
         - Click **+ Add endpoint**.
         - For the **Endpoint URL**, use `http://localhost:9002/api/stripe/webhook` for local testing.
-        - For **Events to send**, click `+ Select events` and add `account.updated` and `checkout.session.completed`.
-        - After creation, find the **Signing secret** for the new webhook.
+        - For **Events to send**, click `+ Select events` and add the following to support current and future billing features:
+            - Under `Account`: `account.updated`
+            - Under `Checkout`: `checkout.session.completed`
+            - Under `Invoice`: `invoice.payment_succeeded`, `invoice.payment_failed`
+            - Under `Customer`: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+        - After creation, find the **Signing secret** for the new webhook. It will start with `whsec_...`.
     - **Step 3: Update `.env`:**
         ```env
         # The public URL of your deployed application.

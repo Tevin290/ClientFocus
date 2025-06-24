@@ -9,8 +9,19 @@ import { updateCompanyProfile } from '@/lib/firestoreService';
 
 
 const relevantEvents = new Set([
+  // For Stripe Connect Onboarding
   'account.updated',
+
+  // For one-time payments and setting up payment methods
   'checkout.session.completed',
+
+  // For billing and subscriptions (future features)
+  'invoice.payment_succeeded',
+  'invoice.payment_failed',
+  'invoice.paid',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
 ]);
 
 export async function POST(req: NextRequest) {
@@ -63,9 +74,17 @@ export async function POST(req: NextRequest) {
             // For example, if a client's payment setup is successful, you could trigger a welcome email.
             break;
         }
+        
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object as Stripe.Invoice;
+          console.log(`[Webhook] Invoice payment succeeded for: ${invoice.id}`);
+          // TODO: Future implementation: Find the corresponding session(s) in your database using a
+          // description or metadata on the invoice, and update its status to 'Billed'.
+          break;
+        }
           
         default:
-          console.warn(`Unhandled relevant event type: ${event.type}`);
+          console.warn(`[Webhook] Unhandled relevant event type: ${event.type}`);
       }
     } catch (error) {
       console.error('Webhook handler failed.', error);
