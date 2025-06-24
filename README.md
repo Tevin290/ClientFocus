@@ -54,11 +54,13 @@ Streamline your coaching sessions and client management with SessionSync. This N
         - In the **Developers** section, go to **Webhooks**.
         - You will need to create **two** endpoints: one for test mode and one for live mode.
         - **Test Webhook:**
+            - Make sure the "Test mode" toggle at the top of the Stripe dashboard is **ON**.
             - Click **+ Add endpoint**.
             - Endpoint URL: `http://localhost:9002/api/stripe/webhook` (or your deployed test URL).
             - Events: Add all the recommended events listed below.
             - After creation, copy the **Signing secret**. This is your `STRIPE_WEBHOOK_SECRET_TEST`.
         - **Live Webhook:**
+            - Make sure the "Test mode" toggle at the top of the Stripe dashboard is **OFF**.
             - Click **+ Add endpoint** again.
             - Endpoint URL: `https://your-production-app-url.com/api/stripe/webhook`.
             - Events: Add all the recommended events listed below.
