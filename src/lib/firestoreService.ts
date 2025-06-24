@@ -447,7 +447,7 @@ export async function getCompanyProfile(companyId: string): Promise<CompanyProfi
     const companyDocRef = doc(db, 'companies', companyId);
     const companySnap = await getDoc(companyDocRef);
     if (companySnap.exists()) {
-      return companySnap.data() as CompanyProfile;
+      return { id: companySnap.id, ...companySnap.data() } as CompanyProfile;
     }
     return null;
   } catch (error: any) {
