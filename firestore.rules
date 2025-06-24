@@ -4,71 +4,97 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ======== HELPER FUNCTIONS ========
-    function isSignedIn() {
-      return request.auth != null;
+    // Helper function to check if a user has a specific role
+    function hasRole(role) {
+      // Check if user is authenticated and has a profile
+      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
-
-    // Checks if the requesting user is the owner of a given document/profile
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Gets the role of the currently authenticated user
-    function getRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-
-    // Checks if the current user is an Admin or Super-Admin
+    
+    // Helper function for admin roles
     function isAdmin() {
-      return isSignedIn() && getRole() in ['admin', 'super-admin'];
+      return hasRole('admin') || hasRole('super-admin');
     }
 
-    // Checks if the current user is a Coach
-    function isCoach() {
-      return isSignedIn() && getRole() == 'coach';
+    function isSuperAdmin() {
+        return hasRole('super-admin');
     }
 
-    // ======== USERS COLLECTION ========
+    // Is the user creating their own profile for the first time?
+    function isCreatingOwnProfile(userId) {
+       return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Does the incoming request have the correct data for a user profile?
+    function isValidUserProfileData() {
+      return request.resource.data.uid == request.auth.uid
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 2
+          && request.resource.data.role is string
+          && request.resource.data.role in ['client', 'coach', 'admin', 'super-admin']
+          && request.resource.data.createdAt is timestamp;
+    }
+
+    // Rules for the 'users' collection
     match /users/{userId} {
-      
-      // CREATE: Anyone authenticated can create their own user profile document.
-      // This is crucial for the signup flow.
-      allow create: if isOwner(userId);
+      // ANYONE can create their own user document during signup
+      allow create: if isCreatingOwnProfile(userId) && isValidUserProfileData();
 
-      // READ: Users can read their own profile. Admins can read any profile.
-      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
-
-      // UPDATE: A user can only update their own profile. Admins can update any profile.
-      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      // Only an authenticated user can read their own profile, or an admin can read any profile
+      allow get: if request.auth.uid == userId || isAdmin();
       
-      // DELETE: Deleting users is disallowed from the client.
+      // A user can update their own profile, or a super-admin can update any profile.
+      // Super-admins need this for the migration script.
+      allow update: if request.auth.uid == userId || isSuperAdmin();
+
+      // Only super-admins can list all users for the migration script.
+      allow list: if isSuperAdmin();
+
+      // Users should not be deleted.
+      allow delete: if false;
+    }
+
+    // Rules for the 'sessions' collection
+    match /sessions/{sessionId} {
+      // Helper function to check ownership
+      function isOwnerOrAdmin() {
+        let resourceData = resource.data;
+        return request.auth.uid == resourceData.coachId 
+               || request.auth.uid == resourceData.clientId
+               || isAdmin();
+      }
+
+      // Read access for involved parties and admins
+      allow get: if request.auth != null && isOwnerOrAdmin();
+
+      // Coaches can create sessions for their clients
+      allow create: if hasRole('coach') && request.auth.uid == request.resource.data.coachId;
+
+      // Coach can update their own session, or a super-admin can for migration.
+      allow update: if (hasRole('coach') && request.auth.uid == resource.data.coachId) || isSuperAdmin();
+
+      // Super-admins need to list all sessions for the migration script.
+      allow list: if isSuperAdmin();
+      
+      // Deletion is disallowed, sessions should be archived instead.
       allow delete: if false;
     }
     
-    // ======== SESSIONS COLLECTION ========
-    match /sessions/{sessionId} {
-      
-      // CREATE: Only coaches can create new session logs.
-      allow create: if isCoach();
-      
-      // READ: Admins, the assigned coach, or the assigned client can read a session.
-      allow read: if isSignedIn() && (isAdmin() || resource.data.coachId == request.auth.uid || resource.data.clientId == request.auth.uid);
-      
-      // UPDATE: Only admins or the assigned coach can update a session.
-      allow update: if isSignedIn() && (isAdmin() || resource.data.coachId == request.auth.uid);
-      
-      // DELETE: Deleting sessions is disallowed from the client.
-      allow delete: if false;
-    }
-
-    // ======== COMPANIES COLLECTION ========
+    // Rules for the 'companies' collection
     match /companies/{companyId} {
-      // READ: Any authenticated user can read company information.
-      allow read: if isSignedIn();
-      
-      // CREATE/UPDATE/DELETE: Only admins can manage company documents.
-      allow write: if isAdmin();
+        // Any authenticated user can read company details.
+        allow get: if request.auth != null;
+
+        // Super-admins can list companies.
+        allow list: if isSuperAdmin();
+
+        // Only super-admins can create or update company details.
+        // The migration script needs 'create'.
+        allow create, update: if isSuperAdmin();
+
+        // Disallow deletion for now.
+        allow delete: if false;
     }
   }
 }
