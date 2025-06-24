@@ -4,79 +4,75 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions to keep rules DRY
-    function isAuth() { 
-      return request.auth != null; 
-    }
-    
-    function getRole() { 
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; 
-    }
-
-    function isRole(role) { 
-      return isAuth() && getRole() == role; 
+    // Helper function to get a user's role from their profile
+    function getUserRole(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      if (exists(/databases/$(database)/documents/users/$(userId))) {
+        return userDoc.data.role;
+      }
+      return null;
     }
 
-    function isAdmin() { 
-      return isRole('admin') || isRole('super-admin'); 
-    }
-
-    function isCoach() { 
-      return isRole('coach'); 
-    }
-
-    function isClient() { 
-      return isRole('client'); 
-    }
-
-    // ------ USER PROFILES ------
+    // USERS Collection Rules
     match /users/{userId} {
-      // ANY authenticated user can CREATE their own user document (on signup).
-      // Public can READ coach profiles for the signup list.
-      allow create: if isAuth() && request.auth.uid == userId;
-      allow read: if resource.data.role == 'coach' || (isAuth() && (
-                    request.auth.uid == userId ||
-                    isAdmin() ||
-                    (isCoach() && resource.data.coachId == request.auth.uid)
-                  ));
+      // Allow a user to be created only during signup by that same user.
+      allow create: if request.auth != null && request.auth.uid == userId;
 
-      // A client can update their own coachId.
-      // Users can update their own displayName, photoURL.
-      // Admins can update anything.
-      allow update: if isAuth() && (
-        (request.auth.uid == userId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coachId', 'displayName', 'photoURL', 'updatedAt'])) ||
-        isAdmin()
-      );
-      
-      // Only admins can delete users.
-      allow delete: if isAdmin();
+      // Allow users to read their own profile.
+      // Allow admins to read any user profile.
+      // Allow coaches to read the profiles of clients assigned to them.
+      allow read: if request.auth != null && (
+                    request.auth.uid == userId ||
+                    getUserRole(request.auth.uid) in ['admin', 'super-admin'] ||
+                    (getUserRole(request.auth.uid) == 'coach' && resource.data.coachId == request.auth.uid)
+                  );
+
+      // Allow users to update their own profile data (e.g., displayName, photoURL, coachId).
+      // Disallow users from changing their own role.
+      // Allow admins to update any part of a user's profile.
+      allow update: if request.auth != null && (
+                      (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
+                      getUserRole(request.auth.uid) in ['admin', 'super-admin']
+                    );
+
+      // Only admins can delete user accounts.
+      allow delete: if request.auth != null && getUserRole(request.auth.uid) in ['admin', 'super-admin'];
     }
 
-    // ------ SESSIONS ------
+    // SESSIONS Collection Rules
     match /sessions/{sessionId} {
-      // Who can CREATE a session?
-      // Only a coach can create a session, and they must be the coachId on the session doc.
-      allow create: if isCoach() && request.resource.data.coachId == request.auth.uid;
+      // Allow a coach to create a session for one of their clients.
+      // The coach creating the session must be the one listed in the session document.
+      allow create: if request.auth != null &&
+                    getUserRole(request.auth.uid) == 'coach' &&
+                    request.auth.uid == request.resource.data.coachId;
 
-      // Who can READ sessions?
-      // Admin: can read all sessions.
-      // Coach: can read sessions they created OR sessions for clients assigned to them.
-      // Client: can read their own sessions.
-      allow read: if isAuth() && (
-        isAdmin() ||
-        (isClient() && resource.data.clientId == request.auth.uid) ||
-        (isCoach() && resource.data.coachId == request.auth.uid) ||
-        (isCoach() && get(/databases/$(database)/documents/users/$(resource.data.clientId)).data.coachId == request.auth.uid)
-      );
-                     
-      // Who can UPDATE sessions?
-      // Admin: can update any session.
-      // Coach: can update sessions they created, but only certain fields.
-      allow update: if isAdmin() ||
-                       (isCoach() && resource.data.coachId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sessionDate', 'sessionType', 'videoLink', 'sessionNotes', 'summary', 'updatedAt']));
+      // Allow clients to read their own sessions.
+      // Allow coaches to read sessions they created.
+      // Allow admins to read any session.
+      allow read: if request.auth != null && (
+                    request.auth.uid == resource.data.clientId ||
+                    request.auth.uid == resource.data.coachId ||
+                    getUserRole(request.auth.uid) in ['admin', 'super-admin']
+                  );
 
-      // Who can DELETE sessions?
-      allow delete: if isAdmin();
+      // Allow coaches to update sessions they created.
+      // Allow admins to update sessions (e.g., for status changes).
+      allow update: if request.auth != null && (
+                      request.auth.uid == resource.data.coachId ||
+                      getUserRole(request.auth.uid) in ['admin', 'super-admin']
+                    );
+
+      // Only admins can delete sessions.
+      allow delete: if request.auth != null && getUserRole(request.auth.uid) in ['admin', 'super-admin'];
+    }
+
+    // COMPANIES Collection Rules (for multi-tenancy)
+    match /companies/{companyId} {
+      // Allow authenticated reads for now.
+      allow read: if request.auth != null;
+      // Only admins/super-admins can create or modify company documents.
+      allow write: if request.auth != null && getUserRole(request.auth.uid) in ['admin', 'super-admin'];
     }
   }
 }
