@@ -344,12 +344,13 @@ export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
   ensureFirebaseIsOperational();
   try {
     const usersCol = collection(db, 'users');
-    const q = query(usersCol, where('role', '==', 'coach'), where('companyId', '==', companyId), orderBy('displayName', 'asc'));
+    // Query without ordering to avoid needing a composite index for the order-by clause.
+    const q = query(usersCol, where('role', '==', 'coach'), where('companyId', '==', companyId));
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
     }
-    return snapshot.docs.map(doc => {
+    const coaches = snapshot.docs.map(doc => {
       const data = doc.data();
       let createdAtTimestamp: Timestamp;
       if (data.createdAt instanceof Timestamp) {
@@ -369,8 +370,16 @@ export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
         companyId: data.companyId,
       } as UserProfile;
     });
+
+    // Perform sorting in code
+    coaches.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return coaches;
+
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getAllCoaches:`, error);
+     if (error.code === 'failed-precondition') {
+      throw new Error(`Failed to fetch coaches. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
+    }
     throw new Error(`Failed to fetch coaches. See server logs for details.`);
   }
 }
@@ -379,18 +388,18 @@ export async function getCoachClients(coachId: string, companyId: string): Promi
   ensureFirebaseIsOperational();
   try {
     const usersCol = collection(db, 'users');
+    // Query without ordering to avoid needing a composite index for the order-by clause.
     const q = query(
       usersCol,
       where('role', '==', 'client'),
       where('coachId', '==', coachId),
-      where('companyId', '==', companyId),
-      orderBy('displayName', 'asc')
+      where('companyId', '==', companyId)
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
     }
-    return snapshot.docs.map(doc => {
+    const clients = snapshot.docs.map(doc => {
       const data = doc.data();
       let createdAtTimestamp: Timestamp;
       if (data.createdAt instanceof Timestamp) {
@@ -411,6 +420,11 @@ export async function getCoachClients(coachId: string, companyId: string): Promi
         companyId: data.companyId,
       } as UserProfile;
     });
+
+    // Perform sorting in code
+    clients.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return clients;
+
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getCoachClients for coachID ${coachId}:`, error);
     if (error.code === 'failed-precondition') {
