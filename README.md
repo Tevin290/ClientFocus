@@ -82,7 +82,7 @@ Streamline your coaching sessions and client management with SessionSync. This N
     - **Step 3: Update `.env`:**
         - Your secret keys have already been added.
         - Your webhook secrets have already been added.
-        - Ensure `NEXT_PUBLIC_APP_URL` is correct.
+        - Ensure `NEXT_PUBLIC_APP_URL` is correct. **Do not include a trailing slash.**
 
 4.  **Configure Admin Emails (Optional):**
     - The `.env` file can specify which emails are automatically assigned the 'admin' role on signup.
