@@ -7,14 +7,34 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { getCompanyProfile, updateCompanyProfile, updateUserProfile } from './firestoreService';
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set in the environment variables.');
-}
-if (!process.env.NEXT_PUBLIC_APP_URL) {
-    throw new Error('NEXT_PUBLIC_APP_URL is not set in the environment variables.');
+// This is a client-callable function to safely get the mode from localStorage
+export function getStripeMode(): 'test' | 'live' {
+    if (typeof window !== 'undefined') {
+        const mode = localStorage.getItem('stripe_test_mode');
+        return mode === 'false' ? 'live' : 'test'; // Default to test mode
+    }
+    return 'test'; // Server-side default
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+// This is a client-callable function to safely set the mode in localStorage
+export function setStripeMode(mode: 'test' | 'live') {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('stripe_test_mode', String(mode === 'test'));
+    }
+}
+
+function getStripeSecretKey(mode: 'test' | 'live'): string {
+    const key = mode === 'test' 
+        ? process.env.STRIPE_SECRET_KEY_TEST 
+        : process.env.STRIPE_SECRET_KEY_LIVE;
+
+    if (!key) {
+        throw new Error(`Stripe secret key for ${mode} mode is not set in environment variables.`);
+    }
+    return key;
+}
+
+export const stripe = new Stripe(getStripeSecretKey('live'), {
   apiVersion: '2024-06-20',
   typescript: true,
 });
@@ -23,8 +43,13 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
  * Creates a Stripe Connect onboarding link for a company.
  * Creates a new Stripe Express account if one doesn't exist.
  */
-export async function createConnectAccountLink(companyId: string, companyName: string): Promise<{ url: string | null; error?: string }> {
+export async function createConnectAccountLink(
+    companyId: string, 
+    companyName: string,
+    mode: 'test' | 'live'
+): Promise<{ url: string | null; error?: string }> {
   try {
+    const secretKey = getStripeSecretKey(mode);
     let companyProfile = await getCompanyProfile(companyId);
     if (!companyProfile) {
       throw new Error('Company profile not found.');
@@ -32,7 +57,6 @@ export async function createConnectAccountLink(companyId: string, companyName: s
 
     let { stripeAccountId } = companyProfile;
 
-    // Create a new Stripe account if it doesn't exist
     if (!stripeAccountId) {
       const account = await stripe.accounts.create({
         type: 'express',
@@ -42,7 +66,7 @@ export async function createConnectAccountLink(companyId: string, companyName: s
           card_payments: { requested: true },
           transfers: { requested: true },
         },
-      });
+      }, { apiKey: secretKey });
       stripeAccountId = account.id;
       await updateCompanyProfile(companyId, { stripeAccountId });
     }
@@ -52,7 +76,7 @@ export async function createConnectAccountLink(companyId: string, companyName: s
       refresh_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing`,
       return_url: `${process.env.NEXT_PUBLIC_APP_URL}/stripe/connect/return`,
       type: 'account_onboarding',
-    });
+    }, { apiKey: secretKey });
 
     return { url: accountLink.url };
 
@@ -71,9 +95,11 @@ export async function createCheckoutSetupSession(
   companyId: string,
   stripeAccountId: string,
   clientId: string,
-  clientEmail: string
+  clientEmail: string,
+  mode: 'test' | 'live'
 ): Promise<{ url: string | null; error?: string }> {
   try {
+    const secretKey = getStripeSecretKey(mode);
     const userRef = doc(db, 'users', clientId);
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) {
@@ -88,7 +114,8 @@ export async function createCheckoutSetupSession(
         email: clientEmail,
         description: `Client ${clientId} for company ${companyId}`,
       }, {
-        stripeAccount: stripeAccountId, // Create the customer on the connected account
+        stripeAccount: stripeAccountId,
+        apiKey: secretKey,
       });
       stripeCustomerId = customer.id;
       await updateUserProfile(clientId, { stripeCustomerId });
@@ -101,7 +128,8 @@ export async function createCheckoutSetupSession(
         success_url: `${process.env.NEXT_PUBLIC_APP_URL}/client/settings?payment_setup_success=true`,
         cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/client/settings?payment_setup_cancelled=true`,
     }, {
-        stripeAccount: stripeAccountId, // Create the session on behalf of the connected account
+        stripeAccount: stripeAccountId,
+        apiKey: secretKey,
     });
 
     return { url: session.url };
@@ -111,3 +139,5 @@ export async function createCheckoutSetupSession(
     return { url: null, error: error.message || 'Failed to create payment setup session.' };
   }
 }
+
+    

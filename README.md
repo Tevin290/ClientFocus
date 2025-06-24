@@ -49,26 +49,37 @@ Streamline your coaching sessions and client management with SessionSync. This N
     - **Step 1: Get API Keys:**
         - Log in to your [Stripe Dashboard](https://dashboard.stripe.com).
         - Go to the **Developers** section.
-        - Under **API keys**, find your **Secret key**. Use the "Test mode" key for development.
-    - **Step 2: Create a Webhook:**
+        - Under **API keys**, find your keys. You will need **both** your test keys and your live keys.
+    - **Step 2: Create Webhooks:**
         - In the **Developers** section, go to **Webhooks**.
-        - Click **+ Add endpoint**.
-        - For the **Endpoint URL**, use `http://localhost:9002/api/stripe/webhook` for local testing.
-        - For **Events to send**, click `+ Select events` and add the following to support current and future billing features:
-            - Under `Account`: `account.updated`
-            - Under `Checkout`: `checkout.session.completed`
-            - Under `Invoice`: `invoice.payment_succeeded`, `invoice.payment_failed`
-            - Under `Customer`: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
-        - After creation, find the **Signing secret** for the new webhook. It will start with `whsec_...`.
+        - You will need to create **two** endpoints: one for test mode and one for live mode.
+        - **Test Webhook:**
+            - Click **+ Add endpoint**.
+            - Endpoint URL: `http://localhost:9002/api/stripe/webhook` (or your deployed test URL).
+            - Events: Add all the recommended events listed below.
+            - After creation, copy the **Signing secret**. This is your `STRIPE_WEBHOOK_SECRET_TEST`.
+        - **Live Webhook:**
+            - Click **+ Add endpoint** again.
+            - Endpoint URL: `https://your-production-app-url.com/api/stripe/webhook`.
+            - Events: Add all the recommended events listed below.
+            - After creation, copy the **Signing secret**. This is your `STRIPE_WEBHOOK_SECRET_LIVE`.
+    - **Recommended Webhook Events:**
+        - Under `Account`: `account.updated`
+        - Under `Checkout`: `checkout.session.completed`
+        - Under `Invoice`: `invoice.payment_succeeded`, `invoice.payment_failed`
+        - Under `Customer`: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
     - **Step 3: Update `.env`:**
         ```env
         # The public URL of your deployed application.
-        # For local development, this should match your dev server port.
         NEXT_PUBLIC_APP_URL=http://localhost:9002
 
-        # Your platform's Stripe keys (use test keys for development).
-        STRIPE_SECRET_KEY=sk_test_...
-        STRIPE_WEBHOOK_SECRET=whsec_...
+        # Your platform's Stripe keys (get from Stripe Dashboard -> Developers -> API Keys)
+        STRIPE_SECRET_KEY_TEST=sk_test_...
+        STRIPE_SECRET_KEY_LIVE=sk_live_...
+
+        # Your webhook signing secrets (get from Stripe Dashboard -> Developers -> Webhooks)
+        STRIPE_WEBHOOK_SECRET_TEST=whsec_...
+        STRIPE_WEBHOOK_SECRET_LIVE=whsec_...
         ```
 
 4.  **Configure Admin Emails (Optional):**
@@ -121,3 +132,5 @@ If you get a CORS or `404 Not Found` error when uploading images, you must confi
     ```
 
 This process ensures you are logged into the correct account and targeting the correct project, which should resolve the upload errors permanently.
+
+    

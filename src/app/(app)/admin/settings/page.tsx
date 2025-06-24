@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { getStripeMode, setStripeMode } from '@/lib/stripeService';
 
 
 const selectCoachSchema = z.object({
@@ -54,16 +55,16 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
-    const savedMode = localStorage.getItem('stripe_test_mode');
-    setIsTestMode(savedMode === null || savedMode === 'true');
+    setIsTestMode(getStripeMode() === 'test');
   }, []);
 
   const handleTestModeChange = (checked: boolean) => {
+    const newMode = checked ? 'test' : 'live';
+    setStripeMode(newMode);
     setIsTestMode(checked);
-    localStorage.setItem('stripe_test_mode', String(checked));
     toast({
         title: `Stripe mode changed`,
-        description: `Stripe is now in ${checked ? 'Test' : 'Live'} mode.`,
+        description: `Stripe is now in ${newMode === 'test' ? 'Test' : 'Live'} mode.`,
     });
   };
 
@@ -210,7 +211,7 @@ export default function AdminSettingsPage() {
                       id="stripe-test-mode"
                       checked={isTestMode}
                       onCheckedChange={handleTestModeChange}
-                      className={isTestMode ? 'animate-glow-pulse' : ''}
+                      className={isTestMode ? 'data-[state=checked]:animate-glow-pulse' : ''}
                       aria-label="Stripe Test Mode"
                     />
                     <Label htmlFor="stripe-test-mode" className="font-medium">
@@ -334,3 +335,5 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+
+    

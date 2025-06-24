@@ -27,8 +27,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import {
   Users,
   Settings,
@@ -88,7 +86,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { role, userProfile, isLoading: isRoleLoading, logout } = useRole(); // Use userProfile for display
   const router = useRouter(); 
-  const [isStripeTestMode, setIsStripeTestMode] = useState(false); // This could come from Firestore appSettings later
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const { toast } = useToast();
 
@@ -215,21 +212,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-4">
-            {(role === 'admin' || role === 'super-admin') && (
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="stripe-test-mode"
-                  checked={isStripeTestMode}
-                  onCheckedChange={setIsStripeTestMode}
-                  className={isStripeTestMode ? 'animate-glow-pulse' : ''}
-                  aria-label="Stripe Test Mode"
-                />
-                <Label htmlFor="stripe-test-mode" className="text-xs font-light uppercase text-muted-foreground">
-                  Stripe Test
-                </Label>
-              </div>
-            )}
-
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
               {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
@@ -275,3 +257,5 @@ export function AppLayout({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    

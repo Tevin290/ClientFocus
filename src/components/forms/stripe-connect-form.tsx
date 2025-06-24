@@ -1,12 +1,12 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createConnectAccountLink } from '@/lib/stripeService';
+import { createConnectAccountLink, getStripeMode } from '@/lib/stripeService';
 import type { CompanyProfile } from '@/lib/firestoreService';
 
 interface StripeConnectFormProps {
@@ -16,11 +16,20 @@ interface StripeConnectFormProps {
 export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
+
+  useEffect(() => {
+    setStripeMode(getStripeMode()); // Get mode from localStorage on mount
+  }, []);
 
   const handleConnect = async () => {
     setIsConnecting(true);
     try {
-      const { url, error } = await createConnectAccountLink(companyProfile.id, companyProfile.name);
+      const { url, error } = await createConnectAccountLink(
+        companyProfile.id, 
+        companyProfile.name,
+        stripeMode // Pass the current mode
+      );
       if (error || !url) {
         throw new Error(error || 'Failed to get Stripe connection URL.');
       }
@@ -37,7 +46,7 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
     }
   };
 
-  const stripeDashboardUrl = `https://dashboard.stripe.com/test/accounts/${companyProfile.stripeAccountId}`;
+  const stripeDashboardUrl = `https://dashboard.stripe.com/${stripeMode === 'test' ? 'test/' : ''}accounts/${companyProfile.stripeAccountId}`;
 
   return (
     <Card className="w-full max-w-2xl shadow-light">
@@ -88,7 +97,7 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
                   <path d="M18.665 9.584l-4.04-1.233L16.299.814h-4.33L8.335 9.584H3.85v4.54h3.69l-1.992 8.244h4.33l4.03-9.52h4.486l2.25-4.63-4.31-.013z" />
                 </svg>
               )}
-              {isConnecting ? 'Redirecting to Stripe...' : 'Connect with Stripe'}
+              {isConnecting ? 'Redirecting to Stripe...' : `Connect with Stripe (${stripeMode})`}
             </Button>
           </div>
         )}
@@ -96,3 +105,5 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
     </Card>
   );
 }
+
+    

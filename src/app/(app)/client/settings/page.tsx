@@ -17,7 +17,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
-import { createCheckoutSetupSession } from '@/lib/stripeService';
+import { createCheckoutSetupSession, getStripeMode } from '@/lib/stripeService';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const selectCoachSchema = z.object({
@@ -37,9 +37,12 @@ export default function ClientSettingsPage() {
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+  const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
+    setStripeMode(getStripeMode()); // Get mode from localStorage
+
     if (searchParams.get('payment_setup_success')) {
         toast({
             title: "Payment Method Added!",
@@ -127,7 +130,13 @@ export default function ClientSettingsPage() {
     }
     setIsRedirectingToStripe(true);
     try {
-        const { url, error } = await createCheckoutSetupSession(userProfile.companyId, companyProfile.stripeAccountId, user.uid, user.email!);
+        const { url, error } = await createCheckoutSetupSession(
+          userProfile.companyId, 
+          companyProfile.stripeAccountId, 
+          user.uid, 
+          user.email!,
+          stripeMode // Pass the current mode
+        );
         if (error || !url) {
             throw new Error(error || 'Failed to create Stripe session.');
         }
@@ -264,3 +273,5 @@ export default function ClientSettingsPage() {
     </div>
   );
 }
+
+    

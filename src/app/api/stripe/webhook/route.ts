@@ -7,7 +7,6 @@ import { getDocs, query, collection, where, updateDoc } from 'firebase/firestore
 import { db } from '@/lib/firebase';
 import { updateCompanyProfile } from '@/lib/firestoreService';
 
-
 const relevantEvents = new Set([
   // For Stripe Connect Onboarding
   'account.updated',
@@ -22,26 +21,42 @@ const relevantEvents = new Set([
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
+  'product.created',
+  'price.created',
 ]);
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = headers().get('Stripe-Signature') as string;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecretTest = process.env.STRIPE_WEBHOOK_SECRET_TEST;
+  const webhookSecretLive = process.env.STRIPE_WEBHOOK_SECRET_LIVE;
 
-  if (!webhookSecret) {
-    console.error('Stripe webhook secret is not set.');
-    return new NextResponse('Webhook secret not configured', { status: 400 });
+  if (!webhookSecretTest && !webhookSecretLive) {
+    console.error('Stripe webhook secrets are not set.');
+    return new NextResponse('Webhook secrets not configured', { status: 400 });
   }
 
   let event: Stripe.Event;
 
+  // This logic allows the same webhook endpoint to handle both test and live events.
+  // It tries to construct the event with the test secret first, then the live secret.
   try {
-    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+    let tempEvent;
+    try {
+        if (!webhookSecretTest) throw new Error("Test secret not available.");
+        tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretTest);
+    } catch (err) {
+        if (!webhookSecretLive) throw new Error("Live secret not available.");
+        tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretLive);
+    }
+    event = tempEvent;
   } catch (err: any) {
-    console.error(`❌ Error message: ${err.message}`);
+    console.error(`❌ Webhook signature verification failed: ${err.message}`);
     return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
+
+  const isLiveMode = event.livemode;
+  console.log(`[Webhook] Received ${isLiveMode ? 'LIVE' : 'TEST'} event: ${event.type}`);
 
   if (relevantEvents.has(event.type)) {
     try {
@@ -51,7 +66,6 @@ export async function POST(req: NextRequest) {
           const account = event.data.object as Stripe.Account;
           console.log(`[Webhook] Account updated: ${account.id}, charges_enabled: ${account.charges_enabled}`);
           
-          // Find the company with this stripeAccountId
           const q = query(collection(db, "companies"), where("stripeAccountId", "==", account.id));
           const querySnapshot = await getDocs(q);
 
@@ -94,3 +108,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ received: true });
 }
+
+    
