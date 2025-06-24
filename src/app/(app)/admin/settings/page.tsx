@@ -62,20 +62,30 @@ export default function AdminSettingsPage() {
       setIsFetchingCoaches(false);
       return;
     }
-    const fetchCoaches = async () => {
-      setIsFetchingCoaches(true);
-      try {
-        const fetchedCoaches = await getAllCoaches();
-        setCoaches(fetchedCoaches);
-      } catch (error) {
-        console.error("Failed to fetch coaches:", error);
-        toast({ title: "Error", description: "Could not load the list of coaches.", variant: "destructive" });
-      } finally {
-        setIsFetchingCoaches(false);
+
+    // Ensure we have the user profile and their companyId before fetching
+    if (userProfile?.companyId) {
+      const fetchCoaches = async () => {
+        setIsFetchingCoaches(true);
+        try {
+          const fetchedCoaches = await getAllCoaches(userProfile.companyId!);
+          setCoaches(fetchedCoaches);
+        } catch (error) {
+          console.error("Failed to fetch coaches:", error);
+          toast({ title: "Error", description: "Could not load the list of coaches.", variant: "destructive" });
+        } finally {
+          setIsFetchingCoaches(false);
+        }
+      };
+      fetchCoaches();
+    } else if (!isRoleLoading) {
+      // If role is loaded but we still don't have a companyId
+      setIsFetchingCoaches(false);
+      if (role === 'admin' || role === 'super-admin') {
+        toast({ title: "Warning", description: "Could not determine your company to fetch coaches.", variant: "destructive" });
       }
-    };
-    fetchCoaches();
-  }, [firebaseAvailable, role, toast]);
+    }
+  }, [firebaseAvailable, role, toast, userProfile, isRoleLoading]);
 
   const handleGenerateData: SubmitHandler<SelectCoachFormValues> = async (data) => {
     if (!firebaseAvailable) {
@@ -209,7 +219,7 @@ export default function AdminSettingsPage() {
                           <SelectTrigger>
                             <SelectValue placeholder={
                               isFetchingCoaches ? "Loading coaches..." : 
-                              coaches.length === 0 ? "No coaches found" : "Select a coach to generate data for"
+                              coaches.length === 0 ? "No coaches found for your company" : "Select a coach to generate data for"
                             } />
                           </SelectTrigger>
                         </FormControl>

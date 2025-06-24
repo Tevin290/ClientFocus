@@ -274,11 +274,11 @@ export async function getAllSessionsForAdmin(role: UserRole): Promise<Session[]>
   }
 }
 
-export async function getAllCoaches(): Promise<UserProfile[]> {
+export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
   ensureFirebaseIsOperational();
   try {
     const usersCol = collection(db, 'users');
-    const q = query(usersCol, where('role', '==', 'coach'), orderBy('displayName', 'asc'));
+    const q = query(usersCol, where('role', '==', 'coach'), where('companyId', '==', companyId), orderBy('displayName', 'asc'));
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
@@ -300,6 +300,7 @@ export async function getAllCoaches(): Promise<UserProfile[]> {
         role: 'coach',
         photoURL: data.photoURL || null,
         createdAt: createdAtTimestamp,
+        companyId: data.companyId,
       } as UserProfile;
     });
   } catch (error: any) {
