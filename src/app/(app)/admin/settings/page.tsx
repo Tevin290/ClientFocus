@@ -63,8 +63,8 @@ export default function AdminSettingsPage() {
     setStripeMode(newMode);
     setIsTestMode(checked);
     toast({
-        title: `Stripe mode changed`,
-        description: `Stripe is now in ${newMode === 'test' ? 'Test' : 'Live'} mode.`,
+        title: `Stripe Platform Mode Changed`,
+        description: `The entire application is now interacting with Stripe in ${newMode === 'test' ? 'Test' : 'Live'} mode.`,
     });
   };
 
@@ -199,10 +199,10 @@ export default function AdminSettingsPage() {
             <CardHeader>
                 <CardTitle className="font-headline flex items-center">
                     <SwitchIcon className="mr-2 h-5 w-5 text-primary"/>
-                    Stripe Mode
+                    Stripe Platform Mode
                 </CardTitle>
                  <CardDescription>
-                    Toggle between Stripe's test and live environments. This affects all billing operations.
+                    This is a global, developer-level setting. It controls whether the entire SessionSync platform uses Stripe's test environment or live environment for all companies.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -219,7 +219,7 @@ export default function AdminSettingsPage() {
                     </Label>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                    {isTestMode ? 'You are currently using Stripe test keys. No real charges will be made.' : 'You are in live mode. Real charges will be processed.'}
+                    {isTestMode ? 'The platform is using Stripe test keys. No real charges will be made.' : 'The platform is in live mode. Real charges will be processed.'}
                 </p>
             </CardContent>
         </Card>
@@ -335,5 +335,3 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
-
-    
