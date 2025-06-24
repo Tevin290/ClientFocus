@@ -30,7 +30,6 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
     setIsConnecting(true);
     try {
       const { url, newAccountId, error } = await createConnectAccountLink(
-        companyProfile.id,
         companyProfile.name,
         stripeMode,
         companyProfile.stripeAccountId

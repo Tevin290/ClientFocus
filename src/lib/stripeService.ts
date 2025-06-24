@@ -12,7 +12,6 @@ import { getStripeSecretKey } from './stripe';
  * Creates a new Stripe Express account if one doesn't exist.
  */
 export async function createConnectAccountLink(
-    companyId: string, 
     companyName: string,
     mode: 'test' | 'live',
     stripeAccountId?: string
@@ -25,7 +24,7 @@ export async function createConnectAccountLink(
     let newAccountId: string | undefined = undefined;
 
     if (!finalStripeAccountId) {
-      console.log(`[Stripe Service] No stripeAccountId provided for company ${companyId}. Creating a new one.`);
+      console.log(`[Stripe Service] No stripeAccountId provided. Creating a new one for company: ${companyName}.`);
       const account = await stripe.accounts.create({
         type: 'express',
         company: { name: companyName },
