@@ -10,7 +10,7 @@ import { ClipboardList, Edit3, ArrowLeft, PlusCircle, Loader2 } from "lucide-rea
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getClientSessions, getUserProfile, type UserProfile } from '@/lib/firestoreService';
+import { getClientSessionsForCoach, getUserProfile, type UserProfile } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { useRole } from '@/context/role-context';
 
@@ -42,7 +42,7 @@ export default function ClientSessionsPage() {
       try {
         const [clientProfile, clientSessions] = await Promise.all([
           getUserProfile(clientId),
-          getClientSessions(clientId)
+          getClientSessionsForCoach(clientId, coachProfile.uid)
         ]);
 
         // --- VALIDATION STEP ---
