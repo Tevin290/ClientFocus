@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -19,7 +18,7 @@ export default function ClientSessionsPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { isLoading: isRoleLoading } = useRole();
+  const { userProfile: coachProfile, isLoading: isRoleLoading } = useRole();
 
   const clientId = params.clientId as string;
 
@@ -33,8 +32,8 @@ export default function ClientSessionsPage() {
   }, []);
 
   useEffect(() => {
-    if (!clientId || !firebaseAvailable) {
-      if(!firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !clientId || !firebaseAvailable || !coachProfile) {
+      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
       return;
     };
     
@@ -45,19 +44,33 @@ export default function ClientSessionsPage() {
           getUserProfile(clientId),
           getClientSessions(clientId)
         ]);
+
+        // --- VALIDATION STEP ---
+        // A coach can only view this page if the client is assigned to them and they are in the same company.
+        if (
+          clientProfile &&
+          clientProfile.role === 'client' &&
+          clientProfile.coachId === coachProfile.uid &&
+          clientProfile.companyId === coachProfile.companyId
+        ) {
+          setClient(clientProfile);
+          setSessions(clientSessions);
+        } else {
+          setClient(null);
+          setSessions([]);
+        }
         
-        setClient(clientProfile);
-        setSessions(clientSessions);
       } catch (error: any) {
         console.error("Failed to fetch client data:", error);
         toast({ title: "Error", description: error.message || "Could not load client details and sessions.", variant: "destructive" });
+        setClient(null);
       } finally {
         setIsLoading(false);
       }
     };
     
     fetchData();
-  }, [clientId, firebaseAvailable, toast]);
+  }, [clientId, firebaseAvailable, toast, coachProfile, isRoleLoading]);
   
   const handleEditSession = (sessionId: string) => {
     router.push(`/coach/my-sessions/${sessionId}/edit`);
