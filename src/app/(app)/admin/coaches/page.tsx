@@ -16,7 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import Link from 'next/link';
 
 export default function AdminCoachesPage() {
-  const { role, isLoading: isRoleLoading } = useRole();
+  const { role, userProfile, isLoading: isRoleLoading } = useRole();
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,18 +28,20 @@ export default function AdminCoachesPage() {
   }, []);
 
   useEffect(() => {
-    if (isRoleLoading || !firebaseAvailable) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !firebaseAvailable || !userProfile?.companyId) {
+       if (!isRoleLoading && (!firebaseAvailable || !userProfile?.companyId)) setIsLoading(false);
       return;
     }
+
+    const companyId = userProfile.companyId;
 
     if (role === 'admin' || role === 'super-admin') {
       const fetchData = async () => {
         setIsLoading(true);
         try {
           const [fetchedCoaches, fetchedSessions] = await Promise.all([
-            getAllCoaches(),
-            getAllSessions()
+            getAllCoaches(companyId),
+            getAllSessions(companyId)
           ]);
           setCoaches(fetchedCoaches);
           setSessions(fetchedSessions);
@@ -54,7 +56,7 @@ export default function AdminCoachesPage() {
     } else {
       setIsLoading(false);
     }
-  }, [role, isRoleLoading, toast, firebaseAvailable]);
+  }, [role, isRoleLoading, toast, firebaseAvailable, userProfile?.companyId]);
 
   const sessionCounts = useMemo(() => {
     if (sessions.length === 0) return new Map<string, number>();
@@ -105,6 +107,21 @@ export default function AdminCoachesPage() {
       </div>
     );
   }
+  
+  if (!userProfile?.companyId) {
+     return (
+      <div>
+        <PageHeader title="Coaches" description="View all coaches and their session statistics." />
+        <Alert variant="destructive" className="shadow-light">
+          <TriangleAlert className="h-5 w-5" />
+          <AlertTitle className="font-headline">Company Not Found</AlertTitle>
+          <AlertDescription>
+            Your user profile is not associated with a company. Please contact support.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -116,7 +133,7 @@ export default function AdminCoachesPage() {
             <Briefcase className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <CardTitle className="font-headline">No Coaches Found</CardTitle>
             <CardDescription>
-              There are no users with the 'coach' role on the platform yet.
+              There are no users with the 'coach' role in your company yet.
             </CardDescription>
           </CardHeader>
         </Card>

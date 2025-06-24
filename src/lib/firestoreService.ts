@@ -34,6 +34,7 @@ export interface UserProfile {
 export interface NewSessionData {
   coachId: string;
   coachName:string;
+  companyId: string;
   clientId: string;
   clientName: string;
   clientEmail: string;
@@ -146,13 +147,14 @@ export async function getClientSessions(clientId: string): Promise<Session[]> {
   }
 }
 
-export async function getCoachSessions(coachId: string): Promise<Session[]> {
+export async function getCoachSessions(coachId: string, companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     const q = query(
       sessionsCol,
       where('coachId', '==', coachId),
+      where('companyId', '==', companyId),
       orderBy('sessionDate', 'desc')
     );
     const snapshot = await getDocs(q);
@@ -228,24 +230,29 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
   }
 }
 
-export async function getAllSessionsForAdmin(role: UserRole): Promise<Session[]> {
+export async function getAllSessionsForAdmin(role: UserRole, companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
     let q;
 
+    const baseQueryConditions = [
+        where('companyId', '==', companyId),
+        where('isArchived', '==', false),
+    ];
+
     if (role === 'admin') {
       // Admin sees sessions that are 'Under Review' or 'Denied' to approve/deny/dismiss them.
       q = query(sessionsCol, 
+        ...baseQueryConditions,
         where('status', 'in', ['Under Review', 'Denied']),
-        where('isArchived', '==', false),
         orderBy('sessionDate', 'desc')
       );
     } else if (role === 'super-admin') {
       // Super Admin sees 'Approved' or 'Billed' sessions to bill them or dismiss them.
       q = query(sessionsCol, 
+        ...baseQueryConditions,
         where('status', 'in', ['Approved', 'Billed']),
-        where('isArchived', '==', false),
         orderBy('sessionDate', 'desc')
       );
     } else {
@@ -309,7 +316,7 @@ export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
   }
 }
 
-export async function getCoachClients(coachId: string): Promise<UserProfile[]> {
+export async function getCoachClients(coachId: string, companyId: string): Promise<UserProfile[]> {
   ensureFirebaseIsOperational();
   try {
     const usersCol = collection(db, 'users');
@@ -317,6 +324,7 @@ export async function getCoachClients(coachId: string): Promise<UserProfile[]> {
       usersCol,
       where('role', '==', 'client'),
       where('coachId', '==', coachId),
+      where('companyId', '==', companyId),
       orderBy('displayName', 'asc')
     );
     const snapshot = await getDocs(q);
@@ -341,6 +349,7 @@ export async function getCoachClients(coachId: string): Promise<UserProfile[]> {
         photoURL: data.photoURL || null,
         createdAt: createdAtTimestamp,
         coachId: data.coachId,
+        companyId: data.companyId,
       } as UserProfile;
     });
   } catch (error: any) {
@@ -353,11 +362,11 @@ export async function getCoachClients(coachId: string): Promise<UserProfile[]> {
   }
 }
 
-export async function getAllSessions(): Promise<Session[]> {
+export async function getAllSessions(companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
-    const q = query(sessionsCol, orderBy('sessionDate', 'desc'));
+    const q = query(sessionsCol, where('companyId', '==', companyId), orderBy('sessionDate', 'desc'));
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];

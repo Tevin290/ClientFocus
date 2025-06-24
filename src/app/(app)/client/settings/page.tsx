@@ -52,14 +52,15 @@ export default function ClientSettingsPage() {
 
 
   useEffect(() => {
-    if (!firebaseAvailable) {
+    if (!firebaseAvailable || !userProfile?.companyId) {
       setIsFetchingCoaches(false);
       return;
     }
     const fetchCoaches = async () => {
       setIsFetchingCoaches(true);
       try {
-        const fetchedCoaches = await getAllCoaches();
+        // Fetch coaches only from the client's company
+        const fetchedCoaches = await getAllCoaches(userProfile.companyId!);
         setCoaches(fetchedCoaches);
       } catch (error) {
         console.error("Failed to fetch coaches:", error);
@@ -69,7 +70,7 @@ export default function ClientSettingsPage() {
       }
     };
     fetchCoaches();
-  }, [firebaseAvailable, toast]);
+  }, [firebaseAvailable, toast, userProfile?.companyId]);
 
 
   const currentCoachName = useMemo(() => {

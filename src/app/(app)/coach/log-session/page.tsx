@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function CoachLogSessionPage() {
-  const { user, role, isLoading: isRoleLoading } = useRole();
+  const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const { toast } = useToast();
@@ -20,11 +20,11 @@ export default function CoachLogSessionPage() {
   useEffect(() => {
     if (isRoleLoading) return;
     
-    if (role === 'coach' && user?.uid && isFirebaseConfigured()) {
+    if (role === 'coach' && user?.uid && userProfile?.companyId && isFirebaseConfigured()) {
       const fetchClients = async () => {
         setIsLoadingClients(true);
         try {
-          const fetchedClients = await getCoachClients(user.uid);
+          const fetchedClients = await getCoachClients(user.uid, userProfile.companyId!);
           setClients(fetchedClients);
         } catch (error: any) {
           console.error("Failed to fetch clients for form:", error);
@@ -37,7 +37,7 @@ export default function CoachLogSessionPage() {
     } else {
       setIsLoadingClients(false);
     }
-  }, [role, user, isRoleLoading, toast]);
+  }, [role, user, userProfile, isRoleLoading, toast]);
 
 
   if (isRoleLoading || isLoadingClients) {
@@ -52,7 +52,7 @@ export default function CoachLogSessionPage() {
     );
   }
 
-  if (role !== 'coach' || !user) {
+  if (role !== 'coach' || !user || !userProfile?.companyId) {
     return (
       <div>
         <PageHeader title="Log New Session" description="Record the details of your latest coaching session." />
@@ -60,7 +60,7 @@ export default function CoachLogSessionPage() {
           <TriangleAlert className="h-4 w-4" />
           <AlertTitle>Access Denied</AlertTitle>
           <AlertDescription>
-            You must be logged in as a coach to access this page.
+            You must be logged in as a coach within a company to access this page.
           </AlertDescription>
         </Alert>
       </div>
@@ -82,12 +82,17 @@ export default function CoachLogSessionPage() {
     );
   }
 
-  // Pass coachId, coachName, and the list of clients to the form
+  // Pass coachId, coachName, companyId, and the list of clients to the form
   return (
     <div>
       <PageHeader title="Log New Session" description="Record the details of your latest coaching session." />
       <div className="mt-8 flex justify-center">
-        <SessionLogForm coachId={user.uid} coachName={user.displayName || "Coach"} clients={clients} />
+        <SessionLogForm 
+          coachId={user.uid} 
+          coachName={user.displayName || "Coach"} 
+          clients={clients}
+          companyId={userProfile.companyId}
+        />
       </div>
     </div>
   );

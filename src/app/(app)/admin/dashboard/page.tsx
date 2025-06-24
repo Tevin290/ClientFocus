@@ -33,7 +33,7 @@ const chartConfig = {
 
 
 export default function AdminDashboardPage() {
-  const { role, isLoading: isRoleLoading } = useRole();
+  const { role, userProfile, isLoading: isRoleLoading } = useRole();
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,18 +42,21 @@ export default function AdminDashboardPage() {
   const firebaseAvailable = isFirebaseConfigured();
 
   useEffect(() => {
-    if (isRoleLoading || !firebaseAvailable) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !firebaseAvailable || !userProfile?.companyId) {
+      if (!isRoleLoading && (!firebaseAvailable || !userProfile?.companyId)) setIsLoading(false);
       return;
     }
+
+    const companyId = userProfile.companyId;
 
     if (role === 'admin' || role === 'super-admin') {
       const fetchData = async () => {
         setIsLoading(true);
         try {
+          // All data fetches are now scoped to the company
           const [fetchedCoaches, fetchedSessions] = await Promise.all([
-            getAllCoaches(),
-            getAllSessions()
+            getAllCoaches(companyId),
+            getAllSessions(companyId)
           ]);
           setCoaches(fetchedCoaches);
           setSessions(fetchedSessions);
@@ -68,7 +71,7 @@ export default function AdminDashboardPage() {
     } else {
       setIsLoading(false);
     }
-  }, [role, isRoleLoading, toast, firebaseAvailable]);
+  }, [role, isRoleLoading, toast, firebaseAvailable, userProfile?.companyId]);
   
 
   const metrics = useMemo(() => {

@@ -16,7 +16,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function CoachMyClientsPage() {
-  const { user, role, isLoading: isRoleLoading } = useRole();
+  const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,18 +28,19 @@ export default function CoachMyClientsPage() {
   }, []);
 
   useEffect(() => {
-    if (isRoleLoading || !firebaseAvailable) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !firebaseAvailable || !userProfile?.companyId) {
+      if (!isRoleLoading && (!firebaseAvailable || !userProfile?.companyId)) setIsLoading(false);
       return;
     }
 
     if (role === 'coach' && user?.uid) {
+      const companyId = userProfile.companyId;
       const fetchData = async () => {
         setIsLoading(true);
         try {
           const [fetchedClients, fetchedSessions] = await Promise.all([
-            getCoachClients(user.uid),
-            getCoachSessions(user.uid)
+            getCoachClients(user.uid, companyId),
+            getCoachSessions(user.uid, companyId)
           ]);
           setClients(fetchedClients);
           setSessions(fetchedSessions);
@@ -56,7 +57,7 @@ export default function CoachMyClientsPage() {
       setSessions([]);
       setIsLoading(false);
     }
-  }, [role, user, isRoleLoading, toast, firebaseAvailable]);
+  }, [role, user, userProfile, isRoleLoading, toast, firebaseAvailable]);
 
   const sessionCounts = useMemo(() => {
     if (sessions.length === 0) return new Map<string, number>();

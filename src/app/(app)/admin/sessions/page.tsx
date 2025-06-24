@@ -27,7 +27,7 @@ export default function AdminSessionReviewPage() {
   const { toast } = useToast();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { role, isLoading: isRoleLoading } = useRole();
+  const { role, userProfile, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
 
   useEffect(() => {
@@ -35,16 +35,18 @@ export default function AdminSessionReviewPage() {
   }, []);
 
   useEffect(() => {
-    if (isRoleLoading || !firebaseAvailable) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !firebaseAvailable || !userProfile?.companyId) {
+      if (!isRoleLoading && (!firebaseAvailable || !userProfile?.companyId)) setIsLoading(false);
       return;
     }
+
+    const companyId = userProfile.companyId;
 
     if (role === 'admin' || role === 'super-admin') {
       const fetchSessions = async () => {
         setIsLoading(true);
         try {
-          const fetchedSessions = await getAllSessionsForAdmin(role);
+          const fetchedSessions = await getAllSessionsForAdmin(role, companyId);
           setSessions(fetchedSessions);
         } catch (error) {
           console.error("Failed to fetch sessions for review:", error);
@@ -58,7 +60,7 @@ export default function AdminSessionReviewPage() {
         setSessions([]);
         setIsLoading(false);
     }
-  }, [role, isRoleLoading, toast, firebaseAvailable]);
+  }, [role, isRoleLoading, toast, firebaseAvailable, userProfile?.companyId]);
 
   const handleUpdateStatus = async (sessionId: string, newStatus: SessionStatus) => {
     if (!firebaseAvailable) {

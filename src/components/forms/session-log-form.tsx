@@ -34,11 +34,12 @@ type SessionLogFormValues = z.infer<typeof sessionLogSchema>;
 interface SessionLogFormProps {
   coachId: string;
   coachName: string;
+  companyId: string;
   clients: UserProfile[];
   session?: Session | null; // For edit mode
 }
 
-export function SessionLogForm({ coachId, coachName, clients, session }: SessionLogFormProps) {
+export function SessionLogForm({ coachId, coachName, companyId, clients, session }: SessionLogFormProps) {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -134,7 +135,7 @@ export function SessionLogForm({ coachId, coachName, clients, session }: Session
           videoLink: data.videoLink,
           sessionNotes: data.sessionNotes,
           summary: data.summary,
-          // Client cannot be changed in edit mode, so we don't include it here
+          // Client and company cannot be changed in edit mode, so we don't include it here
         };
         await updateSession(session.id, updatePayload);
         toast({ title: 'Session Updated!', description: `Your changes to the session for ${selectedClient.displayName} have been saved.` });
@@ -144,6 +145,7 @@ export function SessionLogForm({ coachId, coachName, clients, session }: Session
         const sessionDataToLog: NewSessionData = {
           coachId,
           coachName,
+          companyId,
           clientId: selectedClient.uid,
           clientName: selectedClient.displayName,
           clientEmail: selectedClient.email,

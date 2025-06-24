@@ -88,8 +88,8 @@ export default function AdminSettingsPage() {
   }, [firebaseAvailable, role, toast, userProfile, isRoleLoading]);
 
   const handleGenerateData: SubmitHandler<SelectCoachFormValues> = async (data) => {
-    if (!firebaseAvailable) {
-      toast({ title: "Operation Failed", description: "Firebase is not configured. Cannot generate data.", variant: "destructive" });
+    if (!firebaseAvailable || !userProfile?.companyId) {
+      toast({ title: "Operation Failed", description: "Firebase is not configured or your company is not set. Cannot generate data.", variant: "destructive" });
       return;
     }
 
@@ -101,7 +101,11 @@ export default function AdminSettingsPage() {
 
     setIsGenerating(true);
     try {
-      const result = await generateDummyDataForCoach({ coachId: selectedCoach.uid, coachName: selectedCoach.displayName });
+      const result = await generateDummyDataForCoach({ 
+        coachId: selectedCoach.uid, 
+        coachName: selectedCoach.displayName,
+        companyId: userProfile.companyId,
+      });
       toast({
         title: "Dummy Data Generation Complete",
         description: `${result.clientsCreated} clients and ${result.sessionsCreated} sessions created for ${selectedCoach.displayName}.`,

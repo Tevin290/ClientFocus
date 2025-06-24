@@ -33,7 +33,7 @@ import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
-import { getAllCoaches, type UserProfile as CoachProfile } from '@/lib/firestoreService';
+import { getAllCoaches, type UserProfile, type UserProfile as CoachProfile } from '@/lib/firestoreService';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -84,6 +84,8 @@ const signupFormSchema = z
 
 type SignupFormValues = z.infer<typeof signupFormSchema>;
 
+const DEFAULT_COMPANY_ID = 'hearts-and-minds';
+
 export default function SignupPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -128,7 +130,8 @@ export default function SignupPage() {
       if (!isFirebaseConfigured()) return;
       setIsLoadingCoaches(true);
       try {
-        const fetchedCoaches = await getAllCoaches();
+        // Fetch coaches from the default company for new signups
+        const fetchedCoaches = await getAllCoaches(DEFAULT_COMPANY_ID);
         setCoaches(fetchedCoaches);
       } catch (error) {
         console.error("Failed to fetch coaches:", error);
@@ -186,14 +189,22 @@ export default function SignupPage() {
       // 3. Create the user's profile document in Firestore
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const role = determineRole(firebaseUser.email);
+      
+      const selectedCoach = coaches.find(c => c.uid === data.coachId);
+      const companyId = role === 'client' ? selectedCoach?.companyId : DEFAULT_COMPANY_ID;
+      
+      if (!companyId) {
+        throw new Error("Could not determine company for the new user. Signup aborted.");
+      }
 
       const userProfileData: any = {
         uid: firebaseUser.uid,
-        email: firebaseUser.email,
+        email: firebaseUser.email!,
         displayName: data.displayName,
         role: role,
         createdAt: Timestamp.now(),
         photoURL: firebaseUser.photoURL || null,
+        companyId: companyId,
       };
 
       if (role === 'client' && data.coachId) {

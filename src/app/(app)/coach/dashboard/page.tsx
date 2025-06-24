@@ -30,7 +30,7 @@ const chartConfig: ChartConfig = {
 };
 
 export default function CoachDashboardPage() {
-  const { user, role, isLoading: isRoleLoading } = useRole();
+  const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -42,11 +42,11 @@ export default function CoachDashboardPage() {
       return;
     }
 
-    if (role === 'coach' && user?.uid) {
+    if (role === 'coach' && user?.uid && userProfile?.companyId) {
       const fetchData = async () => {
         setIsLoading(true);
         try {
-          const fetchedSessions = await getCoachSessions(user.uid);
+          const fetchedSessions = await getCoachSessions(user.uid, userProfile.companyId!);
           setSessions(fetchedSessions);
         } catch (error: any) {
           console.error("Failed to fetch coach dashboard data:", error);
@@ -59,7 +59,7 @@ export default function CoachDashboardPage() {
     } else {
       setIsLoading(false);
     }
-  }, [role, user, isRoleLoading, toast, firebaseAvailable]);
+  }, [role, user, userProfile, isRoleLoading, toast, firebaseAvailable]);
 
   const metrics = useMemo(() => {
     const now = new Date();

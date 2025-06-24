@@ -10,15 +10,15 @@ import type { UserProfile } from './firestoreService';
  * This function creates new dummy CLIENTS and assigns them to the coach,
  * then creates dummy SESSIONS for those new clients.
  * This is a server-side action.
- * @param coach An object containing the coach's uid and displayName.
+ * @param coach An object containing the coach's uid, displayName, and companyId.
  * @returns A promise that resolves with the number of clients and sessions created.
  */
-export async function generateDummyDataForCoach(coach: { coachId: string; coachName: string }): Promise<{ clientsCreated: number, sessionsCreated: number }> {
+export async function generateDummyDataForCoach(coach: { coachId: string; coachName: string; companyId: string; }): Promise<{ clientsCreated: number, sessionsCreated: number }> {
   if (!db) {
     throw new Error("Firestore DB is not initialized. This can happen if Firebase configuration is missing or incorrect.");
   }
   
-  console.log(`[DummyData] Starting generation for coach: ${coach.coachName} (${coach.coachId})`);
+  console.log(`[DummyData] Starting generation for coach: ${coach.coachName} (${coach.coachId}) in company ${coach.companyId}`);
 
   const batch = writeBatch(db);
   let clientsCreated = 0;
@@ -52,6 +52,7 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
       photoURL: client.photoURL,
       createdAt: serverTimestamp(),
       coachId: coach.coachId, // Assign to the selected coach
+      companyId: coach.companyId, // Assign to the coach's company
     };
     batch.set(newClientRef, newClientProfile);
     clientsCreated++;
@@ -100,6 +101,7 @@ export async function generateDummyDataForCoach(coach: { coachId: string; coachN
       clientId: clientUser.id,
       clientName: clientUser.name,
       clientEmail: clientUser.email,
+      companyId: coach.companyId, // Assign session to the coach's company
       sessionDate: Timestamp.fromDate(new Date(Date.now() - template.daysAgo * 24 * 60 * 60 * 1000)),
       sessionType: template.sessionType,
       sessionNotes: template.notes,

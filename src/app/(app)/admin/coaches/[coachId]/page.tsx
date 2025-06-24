@@ -23,7 +23,7 @@ export default function AdminCoachDetailsPage() {
   const coachId = params.coachId as string;
   const router = useRouter();
 
-  const { role, isLoading: isRoleLoading } = useRole();
+  const { role, userProfile, isLoading: isRoleLoading } = useRole();
   const [coach, setCoach] = useState<UserProfile | null>(null);
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -36,22 +36,27 @@ export default function AdminCoachDetailsPage() {
   }, []);
 
   useEffect(() => {
-    if (isRoleLoading || !firebaseAvailable || !coachId) {
-      if (!isRoleLoading && !firebaseAvailable) setIsLoading(false);
+    if (isRoleLoading || !firebaseAvailable || !coachId || !userProfile?.companyId) {
+      if (!isRoleLoading && (!firebaseAvailable || !userProfile?.companyId)) setIsLoading(false);
       return;
     }
+
+    const companyId = userProfile.companyId;
 
     if (role === 'admin' || role === 'super-admin') {
       const fetchData = async () => {
         setIsLoading(true);
         try {
+          // All fetches are now scoped to the admin's company
           const [fetchedCoach, fetchedClients, fetchedSessions] = await Promise.all([
             getUserProfile(coachId),
-            getCoachClients(coachId),
-            getCoachSessions(coachId)
+            getCoachClients(coachId, companyId),
+            getCoachSessions(coachId, companyId)
           ]);
-          if(fetchedCoach?.role !== 'coach'){
-             toast({ title: "Not a Coach", description: "The user you are trying to view is not a coach.", variant: "destructive" });
+
+          // Verify the coach belongs to the admin's company
+          if(fetchedCoach?.role !== 'coach' || fetchedCoach?.companyId !== companyId){
+             toast({ title: "Not a Valid Coach", description: "The user you are trying to view is not a coach within your company.", variant: "destructive" });
              setCoach(null);
           } else {
              setCoach(fetchedCoach);
@@ -69,7 +74,7 @@ export default function AdminCoachDetailsPage() {
     } else {
       setIsLoading(false);
     }
-  }, [role, isRoleLoading, toast, firebaseAvailable, coachId]);
+  }, [role, isRoleLoading, toast, firebaseAvailable, coachId, userProfile?.companyId]);
 
   const avatarPlaceholder = useMemo(() => {
     return coach?.displayName.split(' ').map(n => n[0]).join('') || 'C';
@@ -110,7 +115,7 @@ export default function AdminCoachDetailsPage() {
           <TriangleAlert className="h-4 w-4" />
           <AlertTitle>Could Not Load Coach</AlertTitle>
           <AlertDescription>
-            The coach with ID "{coachId}" could not be found or is not a coach.
+            The coach with ID "{coachId}" could not be found or is not a coach in your company.
             <Button variant="link" onClick={() => router.back()} className="p-0 h-auto ml-1">Go Back</Button>
           </AlertDescription>
         </Alert>
