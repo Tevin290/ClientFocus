@@ -6,22 +6,7 @@ import { headers } from 'next/headers';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { getCompanyProfile, updateCompanyProfile, updateUserProfile } from './firestoreService';
-
-function getStripeSecretKey(mode: 'test' | 'live'): string {
-    const key = mode === 'test' 
-        ? process.env.STRIPE_SECRET_KEY_TEST 
-        : process.env.STRIPE_SECRET_KEY_LIVE;
-
-    if (!key) {
-        throw new Error(`Stripe secret key for ${mode} mode is not set in environment variables.`);
-    }
-    return key;
-}
-
-export const stripe = new Stripe(getStripeSecretKey('live'), {
-  apiVersion: '2024-06-20',
-  typescript: true,
-});
+import { getStripeSecretKey } from './stripe';
 
 /**
  * Creates a Stripe Connect onboarding link for a company.
@@ -34,6 +19,8 @@ export async function createConnectAccountLink(
 ): Promise<{ url: string | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
+
     let companyProfile = await getCompanyProfile(companyId);
     if (!companyProfile) {
       throw new Error('Company profile not found.');
@@ -50,7 +37,7 @@ export async function createConnectAccountLink(
           card_payments: { requested: true },
           transfers: { requested: true },
         },
-      }, { apiKey: secretKey });
+      });
       stripeAccountId = account.id;
       await updateCompanyProfile(companyId, { stripeAccountId });
     }
@@ -60,7 +47,7 @@ export async function createConnectAccountLink(
       refresh_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing`,
       return_url: `${process.env.NEXT_PUBLIC_APP_URL}/stripe/connect/return`,
       type: 'account_onboarding',
-    }, { apiKey: secretKey });
+    });
 
     return { url: accountLink.url };
 
@@ -84,6 +71,8 @@ export async function createCheckoutSetupSession(
 ): Promise<{ url: string | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
+
     const userRef = doc(db, 'users', clientId);
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) {
@@ -99,7 +88,6 @@ export async function createCheckoutSetupSession(
         description: `Client ${clientId} for company ${companyId}`,
       }, {
         stripeAccount: stripeAccountId,
-        apiKey: secretKey,
       });
       stripeCustomerId = customer.id;
       await updateUserProfile(clientId, { stripeCustomerId });
@@ -113,7 +101,6 @@ export async function createCheckoutSetupSession(
         cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/client/settings?payment_setup_cancelled=true`,
     }, {
         stripeAccount: stripeAccountId,
-        apiKey: secretKey,
     });
 
     return { url: session.url };
@@ -123,5 +110,3 @@ export async function createCheckoutSetupSession(
     return { url: null, error: error.message || 'Failed to create payment setup session.' };
   }
 }
-
-    

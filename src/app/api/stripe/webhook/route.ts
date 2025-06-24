@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
-import { stripe } from '@/lib/stripeService';
+import { stripe } from '@/lib/stripe';
 import { getDocs, query, collection, where, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { updateCompanyProfile } from '@/lib/firestoreService';
@@ -108,5 +108,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ received: true });
 }
-
-    
