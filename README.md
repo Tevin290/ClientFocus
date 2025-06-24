@@ -10,7 +10,7 @@ Streamline your coaching sessions and client management with SessionSync. This N
 - Session Review: Admins can review submitted sessions and manage billing.
 - Dashboards: Tailored dashboards for Admins (platform overview) and Coaches (session statistics).
 - Client Portal: Clients can view their session history, notes, and recordings.
-- Stripe Integration: Settings for Stripe API keys and test mode management.
+- Stripe Integration: Securely connect company Stripe accounts using Stripe Connect for multi-tenant billing.
 - AI Summarization: Genkit-powered summarization of session notes.
 
 ## Getting Started
@@ -24,23 +24,17 @@ Streamline your coaching sessions and client management with SessionSync. This N
     - Set up Firestore database.
     - Set up Firebase Storage.
     - Obtain your Firebase project configuration credentials.
+- Stripe Account:
+    - Create a Stripe account at [dashboard.stripe.com](https://dashboard.stripe.com).
 
 ### Environment Configuration
 
-1.  **Firebase Configuration:**
-    Update `src/lib/firebase.ts` with your Firebase project's configuration details:
-    ```typescript
-    const firebaseConfig = {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "YOUR_API_KEY",
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
-      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID",
-      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "YOUR_APP_ID",
-      measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "YOUR_MEASUREMENT_ID" // Optional
-    };
-    ```
-    Alternatively, and recommended for security, use environment variables. Create a `.env.local` file in the project root:
+1.  **Create an Environment File:**
+    - In the root of the project, create a file named `.env`.
+    - Copy the contents of the `.env.example` file (if it exists) or use the placeholders below.
+
+2.  **Configure Firebase:**
+    - Update `src/lib/firebase.ts` with your Firebase project's configuration details, or for better security, add them to your `.env` file:
     ```env
     NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
@@ -48,119 +42,62 @@ Streamline your coaching sessions and client management with SessionSync. This N
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
     NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-    NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id # Optional
-
-    # For pre-approved admin emails during signup
-    # Default admin email is 'hello@hmperform.com' if this is not set.
-    # To use multiple, separate them with commas: admin1@hmperform.com,superadmin@hmperform.com
-    NEXT_PUBLIC_ADMIN_EMAILS=hello@hmperform.com 
     ```
 
-2.  **Security Rules (Firestore & Storage):**
-    Deploy the security rules located in `firestore.rules` and `storage.rules` to your Firebase project. These rules are crucial for controlling access to your data and enabling file uploads.
-    Use the Firebase CLI:
-    ```bash
-    # Deploy both Firestore and Storage rules
-    firebase deploy --only firestore,storage
-    ```
-    Alternatively, you can deploy them individually:
-    ```bash
-    firebase deploy --only firestore:rules
-    firebase deploy --only storage
-    ```
-    Ensure you are logged into the Firebase CLI (`firebase login`) and have selected the correct project (`firebase use YOUR_PROJECT_ID`).
+3.  **Configure Stripe (Crucial for Billing):**
+    - These variables are for **your platform's** Stripe account. They allow your app to manage connections for your users.
+    - **Step 1: Get API Keys:**
+        - Log in to your [Stripe Dashboard](https://dashboard.stripe.com).
+        - Go to the **Developers** section.
+        - Under **API keys**, find your **Secret key**. Use the "Test mode" key for development.
+    - **Step 2: Create a Webhook:**
+        - Under **Developers**, go to **Webhooks**.
+        - Click **+ Add endpoint**.
+        - For the **Endpoint URL**, use `http://localhost:9002/api/stripe/webhook` for local testing.
+        - For **Events to send**, click `+ Select events` and add `account.updated` and `checkout.session.completed`.
+        - After creation, find the **Signing secret** for the new webhook.
+    - **Step 3: Update `.env`:**
+        ```env
+        # The public URL of your deployed application.
+        # For local development, this should match your dev server port.
+        NEXT_PUBLIC_APP_URL=http://localhost:9002
 
+        # Your platform's Stripe keys (use test keys for development).
+        STRIPE_SECRET_KEY=sk_test_...
+        STRIPE_WEBHOOK_SECRET=whsec_...
+        ```
+
+4.  **Configure Admin Emails (Optional):**
+    - The `.env` file can specify which emails are automatically assigned the 'admin' role on signup.
+    ```env
+    # To use multiple, separate them with commas: admin1@example.com,superadmin@example.com
+    NEXT_PUBLIC_ADMIN_EMAILS=hello@hmperform.com
+    ```
+
+### Security Rules (Firestore & Storage)
+
+Deploy the security rules located in `firestore.rules` and `storage.rules` to your Firebase project. These rules are crucial for controlling access to your data.
+Use the Firebase CLI:
+```bash
+firebase deploy --only firestore,storage
+```
 
 ### Installation
 
 ```bash
 npm install
-# or
-yarn install
 ```
 
 ### Running the Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
 ```
-The application will be available at `http://localhost:9002` (or the port specified in `package.json`).
+The application will be available at `http://localhost:9002`.
 
-## Manual Verification Steps for Signup Flow
+### Profile Picture Upload Troubleshooting (One-Time Setup)
 
-After deploying the updated code and Firestore rules:
-
-1.  **Sign up as a Client (External Email):**
-    *   Navigate to the `/signup` page.
-    *   Use an email address that **does not** end with `@hmperform.com` (e.g., `testclient@example.com`).
-    *   Select any role in the form (the system will override it to 'client').
-    *   Complete the signup process.
-    *   **Expected Outcome:**
-        *   User is created in Firebase Authentication.
-        *   A new document is created in the `users` collection in Firestore with the user's UID as the document ID.
-        *   The Firestore document should contain:
-            *   `uid`: matching the auth UID.
-            *   `email`: the email used for signup.
-            *   `displayName`: the name entered.
-            *   `role`: `"client"`.
-            *   `createdAt`: a server timestamp.
-        *   No permission errors should occur. User is redirected to login or client dashboard.
-
-2.  **Sign up as a Coach (Company Email - Non-Admin):**
-    *   Navigate to the `/signup` page.
-    *   Use an email address that ends with `@hmperform.com` but is **not** `hello@hmperform.com` (or any email in your `NEXT_PUBLIC_ADMIN_EMAILS` list if configured), e.g., `testcoach@hmperform.com`.
-    *   Select any role (system will override to 'coach').
-    *   Complete the signup process.
-    *   **Expected Outcome:**
-        *   User is created in Firebase Authentication.
-        *   A new document is created in the `users` collection in Firestore.
-        *   The Firestore document should contain `role`: `"coach"`.
-        *   No permission errors.
-
-3.  **Sign up as an Admin (Pre-approved Company Email):**
-    *   Ensure an email like `hello@hmperform.com` (or one from your `NEXT_PUBLIC_ADMIN_EMAILS` env var) is used.
-    *   Navigate to the `/signup` page.
-    *   Use this pre-approved admin email.
-    *   Select any role (system will assign 'admin').
-    *   Complete the signup process.
-    *   **Expected Outcome:**
-        *   User is created in Firebase Authentication.
-        *   A new document is created in the `users` collection in Firestore.
-        *   The Firestore document should contain `role`: `"admin"`.
-        *   No permission errors.
-
-4.  **Attempt Signup with External Email and Forced Coach/Admin Role (via form selection - Zod should catch this):**
-    *   Navigate to the `/signup` page.
-    *   Use an external email (e.g., `attacker@example.com`).
-    *   Try to select "Coach" or "Admin" role in the radio group.
-    *   **Expected Outcome:**
-        *   The form validation (Zod schema) should prevent submission or show an error message indicating that Coach/Admin roles require an `@hmperform.com` email.
-        *   If somehow submitted, the auto-assignment logic in `onSubmit` will assign 'client', and Firestore rules would deny if an invalid role/domain combination was attempted.
-
-## Deployment
-
-1.  **Deploy Firestore & Storage Rules:**
-    ```bash
-    firebase deploy --only firestore,storage
-    ```
-
-2.  **Deploy Frontend Application:**
-    Deploy your Next.js application to your preferred hosting provider (e.g., Vercel, Firebase Hosting, Netlify, Google Cloud App Hosting). Ensure all environment variables (especially Firebase config and `NEXT_PUBLIC_ADMIN_EMAILS`) are set up in your deployment environment.
-    For Firebase App Hosting (if `apphosting.yaml` is configured):
-    ```bash
-    firebase apphosting:backends:deploy
-    ```
-    Or follow your hosting provider's specific deployment instructions.
-
-## Troubleshooting
-
-### Profile Picture Upload Fails (CORS or 404 Error)
-
-If you encounter a CORS error (`...has been blocked by CORS policy...`) or a `404 Not Found` error when running the `gcloud` command, it means your Cloud Storage bucket is not configured correctly. This is a one-time setup that must be done from the command line.
-
-The most common cause of failure is that the `gcloud` command-line tool is not authenticated with the correct Google account that has access to this Firebase project.
+If you get a CORS or `404 Not Found` error when uploading images, you must configure your Cloud Storage bucket from the command line. This is most often caused by the `gcloud` tool not being authenticated with the correct Google account.
 
 **Follow these steps exactly in the Firebase Studio Terminal:**
 
@@ -168,59 +105,15 @@ The most common cause of failure is that the `gcloud` command-line tool is not a
     ```bash
     gcloud auth login
     ```
-    *Follow the prompts in your browser to complete the login.*
 
-2.  **Verify the Account:** After logging in, confirm you are using the correct account.
-    ```bash
-    gcloud auth list
-    ```
-    *Ensure the account marked as `ACTIVE` is the one with access to the `sessionsync-wbo8u` project.*
-
-3.  **Set the Correct Project:** Explicitly tell `gcloud` to use your project.
+2.  **Set the Correct Project:** Explicitly tell `gcloud` to use your project ID.
     ```bash
     gcloud config set project sessionsync-wbo8u
     ```
 
-4.  **Apply the CORS Configuration:** Now, run the command to update the bucket. This command uses the correct bucket name for your project.
+3.  **Apply the CORS Configuration:** This command uses the correct bucket name for your project.
     ```bash
     gcloud storage buckets update gs://sessionsync-wbo8u.appspot.com --cors-file=cors.json
     ```
-    
-This process ensures you are logged into the correct account and targeting the correct project, which should resolve the `404` and CORS errors permanently.
 
-## Genkit (AI Features)
-
-To run Genkit flows locally for development (e.g., for `summarizeSessionNotes`):
-```bash
-npm run genkit:dev
-# or for watching changes
-npm run genkit:watch
-```
-Ensure your Google AI API keys are set up if using Google AI models with Genkit. Refer to Genkit documentation for configuration.
-
-## Future Plans: Evolving to a Multi-Tenant SaaS Platform
-
-The current application is designed for a single organization. However, it is entirely feasible to evolve this project into a multi-tenant Software-as-a-Service (SaaS) platform where multiple companies can use SessionSync independently and securely.
-
-### Recommended Approach
-
-The recommended path is to first perfect the feature set and user experience for the single-tenant version. Once the core product is stable and validated, the architectural shift to multi-tenancy can begin. The trigger for this work would ideally be a second company expressing interest in using the platform.
-
-### Architectural Changes Required
-
-Transforming the app into a multi-tenant SaaS would involve three main areas of work:
-
-1.  **Firestore Data Model Rework (Medium Difficulty):**
-    *   **Introduce a `companies` Collection:** A new top-level collection where each document represents a paying customer company. This document would store company-specific settings, including their Stripe Connect ID.
-    *   **Add `companyId` to all data:** Every document in collections like `users` and `sessions` would need a `companyId` field to link it to the appropriate company, ensuring data is never mixed.
-
-2.  **Security Rules Overhaul (High Difficulty):**
-    *   This is the most critical change. The `firestore.rules` would need a complete rewrite.
-    *   Rules would shift from being user-centric to tenant-centric. Every data access request would be required to verify that the user's `companyId` matches the `companyId` on the document they are trying to access, thus creating a secure wall between each company's data.
-
-3.  **Stripe Integration with Stripe Connect (Medium Difficulty):**
-    *   Instead of storing API keys, the platform would use **Stripe Connect**.
-    *   **Onboarding:** Company admins would securely connect their own Stripe accounts to the platform during onboarding. SessionSync would only store a safe, non-sensitive connection ID (`acct_...`).
-    *   **Billing:** When an admin bills a client, the API call would be made *on behalf of* the connected company account. This ensures that payments flow directly from the client to the company's Stripe account, with the platform optionally taking a service fee from the transaction.
-
-This README provides a basic setup guide. You can expand it with more details about your project architecture, specific component usage, and contribution guidelines.
+This process ensures you are logged into the correct account and targeting the correct project, which should resolve the upload errors permanently.
