@@ -31,18 +31,27 @@ Streamline your coaching sessions and client management with SessionSync. This N
 
 1.  **Create an Environment File:**
     - In the root of the project, create a file named `.env`.
-    - Copy the contents of the `.env.example` file (if it exists) or use the placeholders below.
+    - This file holds all your secret keys. The necessary placeholders are already included.
 
-2.  **Configure Firebase:**
-    - Update `src/lib/firebase.ts` with your Firebase project's configuration details, or for better security, add them to your `.env` file:
-    ```env
-    NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-    NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-    ```
+2.  **Configure Firebase (CRUCIAL):**
+    - The application will not work without these keys.
+    - **Step 1: Find your Firebase config:**
+        - Go to your [Firebase Console](https://console.firebase.google.com/).
+        - Select your project (`sessionsync-wbo8u`).
+        - Click the gear icon next to **Project Overview** and select **Project settings**.
+        - In the **General** tab, scroll down to the **Your apps** section.
+        - Click on your web app (if you don't have one, create one).
+        - Select **Config** under the Firebase SDK snippet section.
+    - **Step 2: Update your `.env` file:**
+        - Copy the values from the Firebase config object and paste them into the corresponding variables in your `.env` file.
+        ```env
+        NEXT_PUBLIC_FIREBASE_API_KEY=...
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+        NEXT_PUBLIC_FIREBASE_APP_ID=...
+        ```
 
 3.  **Configure Stripe (Crucial for Billing):**
     - These variables are for **your platform's** Stripe account. They allow your app to manage connections for your users.
@@ -71,18 +80,9 @@ Streamline your coaching sessions and client management with SessionSync. This N
         - Under `Invoice`: `invoice.payment_succeeded`, `invoice.payment_failed`
         - Under `Customer`: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
     - **Step 3: Update `.env`:**
-        ```env
-        # The public URL of your deployed application.
-        NEXT_PUBLIC_APP_URL=http://localhost:9002
-
-        # Your platform's Stripe keys (get from Stripe Dashboard -> Developers -> API Keys)
-        STRIPE_SECRET_KEY_TEST=sk_test_...
-        STRIPE_SECRET_KEY_LIVE=sk_live_...
-
-        # Your webhook signing secrets (get from Stripe Dashboard -> Developers -> Webhooks)
-        STRIPE_WEBHOOK_SECRET_TEST=whsec_...
-        STRIPE_WEBHOOK_SECRET_LIVE=whsec_...
-        ```
+        - Your secret keys have already been added.
+        - Your webhook secrets have already been added.
+        - Ensure `NEXT_PUBLIC_APP_URL` is correct.
 
 4.  **Configure Admin Emails (Optional):**
     - The `.env` file can specify which emails are automatically assigned the 'admin' role on signup.

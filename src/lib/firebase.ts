@@ -1,65 +1,53 @@
 
-// Ensure you have firebase installed: npm install firebase
-// Replace with your actual Firebase project configuration in your .env.local or directly here if not sensitive.
-// For this example, we assume you'll replace placeholders manually for now.
-
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
-// import { getAnalytics, type Analytics } from "firebase/analytics"; // Optional
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "YOUR_API_KEY",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "YOUR_APP_ID",
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "YOUR_MEASUREMENT_ID" // Optional, G-XXXXXXXXXX
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
-// let analytics: Analytics | undefined; // Optional
+// This function is the single source of truth for configuration status.
+export const isFirebaseConfigured = () => {
+  return !!firebaseConfig.apiKey && !!firebaseConfig.projectId;
+};
 
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
+// Declare the variables. They will be initialized conditionally.
+// Assigning them `null as any` is a way to satisfy TypeScript's strict initialization
+// while ensuring the consuming code, which uses `isFirebaseConfigured` as a guard, works correctly.
+let app: FirebaseApp = null as any;
+let auth: Auth = null as any;
+let db: Firestore = null as any;
+let storage: FirebaseStorage = null as any;
+
+// This check is now the crucial guard that prevents the app from crashing.
+if (isFirebaseConfigured()) {
+  if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApps()[0]!;
+  }
+  
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
 
-  // Set auth persistence to session-only, only in the browser
   if (typeof window !== 'undefined') {
     setPersistence(auth, browserSessionPersistence)
       .catch((error) => {
         console.error("Firebase Auth: Error setting persistence to session-only.", error);
       });
   }
-
-  // if (typeof window !== 'undefined' && firebaseConfig.measurementId && firebaseConfig.measurementId !== "YOUR_MEASUREMENT_ID") {
-  //   analytics = getAnalytics(app);
-  // }
 } else {
-  app = getApps()[0]!;
-  auth = getAuth(app); 
-  db = getFirestore(app);
-  storage = getStorage(app);
+  // This warning will now appear in the server console during build if .env is missing,
+  // and in the browser console if the public env vars are missing.
+  console.warn("Firebase is not configured. Please check your .env file. Firebase services will be unavailable.");
 }
 
 export { app, auth, db, storage };
-// export { app, auth, db, analytics }; // If using analytics
-
-/**
- * Checks if the Firebase configuration has been replaced with actual values.
- * @returns {boolean} True if Firebase seems to be configured, false otherwise.
- */
-export const isFirebaseConfigured = () => {
-  // A simple check to see if the placeholder values are still present.
-  return (
-    firebaseConfig.apiKey !== "YOUR_API_KEY" &&
-    firebaseConfig.projectId !== "YOUR_PROJECT_ID"
-  );
-};
