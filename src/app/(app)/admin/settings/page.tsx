@@ -21,6 +21,18 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { migrateDataToCompany } from '@/lib/migrationService';
 import { Separator } from '@/components/ui/separator';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 
 const selectCoachSchema = z.object({
   coachId: z.string().min(1, 'Please select a coach.'),
@@ -106,23 +118,14 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleMigration = async () => {
-    console.log("[Migration] handleMigration triggered.");
+  const runMigration = async () => {
+    console.log("[Migration] User confirmed migration.");
     if (!firebaseAvailable) {
       toast({ title: "Operation Failed", description: "Firebase is not configured.", variant: "destructive" });
       console.log("[Migration] Aborted: Firebase not available.");
       return;
     }
     
-    console.log("[Migration] Popping confirmation dialog.");
-    const isConfirmed = confirm("Are you absolutely sure? This will modify every user and session document and cannot be easily undone.");
-    
-    if (!isConfirmed) {
-        console.log("[Migration] User cancelled operation.");
-        return;
-    }
-
-    console.log("[Migration] User confirmed. Setting isMigrating to true.");
     setIsMigrating(true);
     try {
         console.log("[Migration] Calling migrateDataToCompany server action...");
@@ -247,15 +250,32 @@ export default function AdminSettingsPage() {
                   <p className="text-sm text-muted-foreground mt-1">
                     This is a one-time action to prepare for a multi-tenant architecture. It will create a "Hearts & Minds" company and assign all existing users and sessions to it. This action is irreversible.
                   </p>
-                  <Button
-                      onClick={handleMigration}
-                      disabled={isMigrating || !firebaseAvailable}
-                      variant="destructive"
-                      className="mt-4"
-                  >
-                      {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Building className="mr-2 h-4 w-4" />}
-                      Migrate All Data to Hearts & Minds
-                  </Button>
+                  
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                          disabled={isMigrating || !firebaseAvailable}
+                          variant="destructive"
+                          className="mt-4"
+                      >
+                          {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Building className="mr-2 h-4 w-4" />}
+                          Migrate All Data to Hearts & Minds
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action will modify every user and session document to assign them to the 'Hearts & Minds' company. This is a critical step for multi-tenancy and cannot be easily undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={runMigration}>Continue</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  
                   {isMigrating && <p className="text-sm text-destructive mt-2">Migrating all data, please wait. Do not close this page.</p>}
                 </div>
               </>
