@@ -97,11 +97,15 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    console.log('[RoleContext] Redirect check:', { user: !!user, role, pathname, isLoading });
+    
     const isAuthPage = pathname === '/login' || pathname === '/signup';
+    const isCompanyAuthPage = pathname.match(/^\/[a-z0-9-]+\/(login|signup)$/);
+    const isCompanyLandingPage = pathname.match(/^\/[a-z0-9-]+$/);
     const isStripeReturn = pathname.startsWith('/stripe/connect/return');
     
     if (user && role) {
-      if (isAuthPage) {
+      if (isAuthPage || isCompanyAuthPage) {
         let dashboardPath = `/${role}/dashboard`;
         if (role === 'super-admin') dashboardPath = '/admin/dashboard';
         
@@ -110,7 +114,11 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
       }
     } 
     else {
-      const isProtectedRoute = !isAuthPage && !pathname.startsWith('/coach/log-session/success') && !isStripeReturn;
+      const isPublicRoute = isAuthPage || isCompanyAuthPage || isCompanyLandingPage || 
+                           pathname === '/' || pathname.startsWith('/coach/log-session/success') || 
+                           isStripeReturn;
+      const isProtectedRoute = !isPublicRoute;
+      
       if (isProtectedRoute) {
         console.log(`[RoleContext] User not authenticated, redirecting to /login from protected page.`);
         router.replace('/login');

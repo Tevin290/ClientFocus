@@ -5,11 +5,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart as BarChartIcon, Users, FilePlus, Loader2, TriangleAlert } from "lucide-react";
+import { BarChart as BarChartIcon, Users, FilePlus, Loader2, TriangleAlert, Building } from "lucide-react";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { useRole } from '@/context/role-context';
+import { useOnboarding } from '@/context/onboarding-context';
 import { useToast } from '@/hooks/use-toast';
 import { getCoachSessions, type Session } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
@@ -30,11 +31,80 @@ const chartConfig: ChartConfig = {
 };
 
 export default function CoachDashboardPage() {
-  const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
+  const { user, userProfile, companyProfile, role, isLoading: isRoleLoading } = useRole();
+  const { addSteps } = useOnboarding();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const firebaseAvailable = isFirebaseConfigured();
+
+  // Setup onboarding tour steps
+  useEffect(() => {
+    const coachTourSteps = [
+      {
+        target: 'body',
+        content: (
+          <div>
+            <h3 className="font-semibold mb-2">Welcome to your Coach Dashboard!</h3>
+            <p>This is your coaching command center. Let's explore the key features to help you manage your coaching practice effectively.</p>
+          </div>
+        ),
+        placement: 'center' as const,
+      },
+      {
+        target: '[data-tour="company-info"]',
+        content: (
+          <div>
+            <h3 className="font-semibold mb-2">Your Company</h3>
+            <p>See which company you belong to and access your company's public page. This helps you stay connected with your organization.</p>
+          </div>
+        ),
+        placement: 'bottom' as const,
+      },
+      {
+        target: '[data-tour="metrics"]',
+        content: (
+          <div>
+            <h3 className="font-semibold mb-2">Your Performance</h3>
+            <p>Track your sessions this month and see how many active clients you're working with. These metrics help you understand your coaching impact.</p>
+          </div>
+        ),
+        placement: 'bottom' as const,
+      },
+      {
+        target: '[data-tour="log-session"]',
+        content: (
+          <div>
+            <h3 className="font-semibold mb-2">Log New Sessions</h3>
+            <p>Quickly log a new coaching session right from your dashboard. Keep your records up-to-date with just one click!</p>
+          </div>
+        ),
+        placement: 'left' as const,
+      },
+      {
+        target: '[data-tour="chart"]',
+        content: (
+          <div>
+            <h3 className="font-semibold mb-2">Session History</h3>
+            <p>View your session breakdown over the last 6 months. Track your full sessions vs half sessions to understand your coaching patterns.</p>
+          </div>
+        ),
+        placement: 'top' as const,
+      },
+      {
+        target: '[data-sidebar]',
+        content: (
+          <div>
+            <h3 className="font-semibold mb-2">Coach Navigation</h3>
+            <p>Use the sidebar to access all coach features: log sessions, view your session history, manage clients, and update settings.</p>
+          </div>
+        ),
+        placement: 'right' as const,
+      },
+    ];
+
+    addSteps('coach-dashboard', coachTourSteps);
+  }, [addSteps]);
 
   useEffect(() => {
     if (isRoleLoading || !firebaseAvailable) {
@@ -142,9 +212,48 @@ export default function CoachDashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Coach Dashboard" description="Your performance and session overview." />
+      <PageHeader 
+        title={`${companyProfile?.name || 'Company'} Coach Dashboard`} 
+        description="Your performance and session overview." 
+      />
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
+      {/* Company Info Card */}
+      {companyProfile && (
+        <Card className="shadow-light mb-6" data-tour="company-info">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center">
+              <Building className="mr-2 h-6 w-6 text-primary" />
+              Company Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Company Name</p>
+                <p className="text-lg font-semibold">{companyProfile.name}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Company Slug</p>
+                <p className="text-lg font-semibold">{companyProfile.slug}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Company URL</p>
+                <p className="text-sm text-blue-600">
+                  <a href={`/${companyProfile.slug}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    {process.env.NEXT_PUBLIC_APP_URL}/{companyProfile.slug}
+                  </a>
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Your Role</p>
+                <p className="text-sm capitalize">{userProfile?.role}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8" data-tour="metrics">
         <Card className="shadow-light">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium uppercase">Sessions This Month</CardTitle>
@@ -172,7 +281,7 @@ export default function CoachDashboardPage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-light flex flex-col items-center justify-center bg-primary/5 dark:bg-primary/10">
+        <Card className="shadow-light flex flex-col items-center justify-center bg-primary/5 dark:bg-primary/10" data-tour="log-session">
             <CardContent className="flex flex-col items-center justify-center p-6 text-center">
                 <FilePlus className="h-8 w-8 text-primary mb-2" />
                 <CardTitle className="text-lg font-headline mb-1">Ready for a new session?</CardTitle>
@@ -186,7 +295,7 @@ export default function CoachDashboardPage() {
         </Card>
       </div>
 
-      <Card className="shadow-light">
+      <Card className="shadow-light" data-tour="chart">
         <CardHeader>
           <CardTitle className="font-headline">Recent Session Breakdown</CardTitle>
           <CardDescription>Number of full and half sessions logged over the last 6 months.</CardDescription>

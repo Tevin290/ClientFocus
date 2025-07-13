@@ -1,7 +1,5 @@
 
-'use server';
-
-import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue, query, where, orderBy, getDocs, addDoc } from 'firebase/firestore';
+import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue, query, where, orderBy, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured, auth } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
@@ -37,11 +35,21 @@ export interface UserProfile {
 export interface CompanyProfile {
     id: string;
     name: string;
+    slug: string; // URL-friendly identifier for white-label URLs
+    adminEmail: string; // Email of the assigned admin for this company
     createdAt: Timestamp;
     stripeAccountId_test?: string;
     stripeAccountOnboarded_test?: boolean;
     stripeAccountId_live?: string;
     stripeAccountOnboarded_live?: boolean;
+    // Branding configuration
+    branding?: {
+        logoUrl?: string;
+        primaryColor?: string;
+        secondaryColor?: string;
+        backgroundColor?: string;
+        textColor?: string;
+    };
 }
 
 export interface NewSessionData {
@@ -80,39 +88,49 @@ export async function createUserProfileInFirestore(
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   ensureFirebaseIsOperational();
+  console.log(`[firestoreService] Attempting to fetch user profile for UID: ${uid}`);
   try {
     const userDocRef = doc(db, 'users', uid);
+    console.log(`[firestoreService] Created doc reference for: users/${uid}`);
     const userSnap = await getDoc(userDocRef);
+    console.log(`[firestoreService] getDoc result - exists: ${userSnap.exists()}`);
     if (userSnap.exists()) {
       const data = userSnap.data();
-      const role = ['admin', 'super-admin', 'coach', 'client'].includes(data.role) ? data.role as UserRole : null;
+      const role = ['admin', 'super-admin', 'coach', 'client'].includes(data?.role) ? data.role as UserRole : null;
 
       let createdAtTimestamp: Timestamp;
-      if (data.createdAt instanceof Timestamp) {
+      if (data?.createdAt instanceof Timestamp) {
         createdAtTimestamp = data.createdAt;
-      } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+      } else if (data?.createdAt && typeof data.createdAt.seconds === 'number') {
         createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
       } else {
         createdAtTimestamp = Timestamp.now();
       }
 
       const profile: UserProfile = {
-        uid: data.uid,
-        email: data.email,
-        displayName: data.displayName,
+        uid: data?.uid || uid,
+        email: data?.email || '',
+        displayName: data?.displayName || '',
         role,
-        photoURL: data.photoURL || null,
+        photoURL: data?.photoURL || null,
         createdAt: createdAtTimestamp,
-        coachId: data.coachId || undefined,
-        stripeCustomerId_test: data.stripeCustomerId_test || undefined,
-        stripeCustomerId_live: data.stripeCustomerId_live || undefined,
-        companyId: data.companyId || undefined,
+        coachId: data?.coachId || undefined,
+        stripeCustomerId_test: data?.stripeCustomerId_test || undefined,
+        stripeCustomerId_live: data?.stripeCustomerId_live || undefined,
+        companyId: data?.companyId || undefined,
       };
       return profile;
     }
     return null;
   } catch (error: any) {
     console.error(`[firestoreService] Detailed Firebase Error in getUserProfile for UID ${uid}:`, error);
+    
+    // Handle permission-denied errors gracefully
+    if (error.code === 'permission-denied') {
+      console.warn(`[firestoreService] Permission denied for user ${uid}. User document may not exist or rules may be blocking access.`);
+      return null;
+    }
+    
     let detailedMessage = `Failed to fetch user profile for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;
@@ -293,6 +311,12 @@ export async function updateSession(sessionId: string, updates: Partial<Omit<Ses
 
 export async function getAllSessionsForAdmin(role: UserRole, companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
+  
+  // Validate role permissions
+  if (role !== 'admin' && role !== 'super-admin') {
+    throw new Error('Access denied: Only admins can view all sessions');
+  }
+  
   try {
     const sessionsCol = collection(db, 'sessions');
     let q;
@@ -344,6 +368,10 @@ export async function getAllSessionsForAdmin(role: UserRole, companyId: string):
 
 export async function getAllCoaches(companyId: string): Promise<UserProfile[]> {
   ensureFirebaseIsOperational();
+  
+  // Note: This function is called during signup, so we allow public access
+  // In production, consider adding authentication check for other contexts
+  
   try {
     const usersCol = collection(db, 'users');
     // Query for all users in the company to avoid composite index.
@@ -446,7 +474,16 @@ export async function getAllSessions(companyId: string): Promise<Session[]> {
   ensureFirebaseIsOperational();
   try {
     const sessionsCol = collection(db, 'sessions');
-    const q = query(sessionsCol, where('companyId', '==', companyId), orderBy('sessionDate', 'desc'));
+    let q;
+    
+    if (companyId === '') {
+      // Super-admin: get all sessions across all companies
+      q = query(sessionsCol, orderBy('sessionDate', 'desc'));
+    } else {
+      // Regular admin: get sessions for specific company
+      q = query(sessionsCol, where('companyId', '==', companyId), orderBy('sessionDate', 'desc'));
+    }
+    
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];
@@ -493,5 +530,179 @@ export async function updateCompanyProfile(companyId: string, updates: Partial<C
   } catch (error: any) {
     console.error(`[firestoreService] Error updating company profile for companyId ${companyId}:`, error);
     throw new Error(`Failed to update company profile.`);
+  }
+}
+
+export async function getCompanyBySlug(slug: string): Promise<CompanyProfile | null> {
+  ensureFirebaseIsOperational();
+  try {
+    const companiesCol = collection(db, 'companies');
+    const q = query(companiesCol, where('slug', '==', slug));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return null;
+    }
+    
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() } as CompanyProfile;
+  } catch (error: any) {
+    console.error(`[firestoreService] Error fetching company by slug ${slug}:`, error);
+    throw new Error(`Failed to fetch company by slug.`);
+  }
+}
+
+export async function getAllCompanies(): Promise<CompanyProfile[]> {
+  ensureFirebaseIsOperational();
+  try {
+    const companiesCol = collection(db, 'companies');
+    const q = query(companiesCol, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return [];
+    }
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as CompanyProfile));
+  } catch (error: any) {
+    console.error(`[firestoreService] Error fetching all companies:`, error);
+    throw new Error(`Failed to fetch companies. See server logs for details.`);
+  }
+}
+
+export async function deleteCompany(companyId: string): Promise<{ success: boolean; error?: string }> {
+  ensureFirebaseIsOperational();
+  try {
+    const companyDocRef = doc(db, 'companies', companyId);
+    await deleteDoc(companyDocRef);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[firestoreService] Error deleting company ${companyId}:`, error);
+    return { success: false, error: error.message || 'Failed to delete company' };
+  }
+}
+
+export async function getAllUsers(): Promise<UserProfile[]> {
+  ensureFirebaseIsOperational();
+  try {
+    const usersCol = collection(db, 'users');
+    const q = query(usersCol, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return [];
+    }
+    
+    const users: UserProfile[] = [];
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      let createdAtTimestamp: Timestamp;
+      if (data.createdAt instanceof Timestamp) {
+        createdAtTimestamp = data.createdAt;
+      } else if (data.createdAt && typeof data.createdAt.seconds === 'number') {
+        createdAtTimestamp = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+      } else {
+        createdAtTimestamp = Timestamp.now();
+      }
+      
+      users.push({
+        uid: data.uid,
+        email: data.email,
+        displayName: data.displayName,
+        role: data.role,
+        photoURL: data.photoURL || null,
+        createdAt: createdAtTimestamp,
+        companyId: data.companyId,
+        coachId: data.coachId,
+        stripeCustomerId_test: data.stripeCustomerId_test,
+        stripeCustomerId_live: data.stripeCustomerId_live,
+      } as UserProfile);
+    });
+    
+    return users;
+  } catch (error: any) {
+    console.error(`[firestoreService] Error fetching all users:`, error);
+    throw new Error(`Failed to fetch users. See server logs for details.`);
+  }
+}
+
+export async function deleteUser(uid: string): Promise<{ success: boolean; error?: string }> {
+  ensureFirebaseIsOperational();
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    await deleteDoc(userDocRef);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[firestoreService] Error deleting user ${uid}:`, error);
+    return { success: false, error: error.message || 'Failed to delete user' };
+  }
+}
+
+export async function updateUserRole(uid: string, role: UserRole, companyId?: string, coachId?: string): Promise<{ success: boolean; error?: string }> {
+  ensureFirebaseIsOperational();
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    const updateData: any = { 
+      role, 
+      updatedAt: serverTimestamp() 
+    };
+    
+    if (companyId) {
+      updateData.companyId = companyId;
+    }
+    
+    if (role === 'client' && coachId) {
+      updateData.coachId = coachId;
+    } else if (role !== 'client') {
+      // Remove coachId for non-client roles
+      updateData.coachId = null;
+    }
+    
+    await updateDoc(userDocRef, updateData);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[firestoreService] Error updating user role for ${uid}:`, error);
+    return { success: false, error: error.message || 'Failed to update user role' };
+  }
+}
+
+export async function createCompany(companyData: {
+  name: string;
+  slug: string;
+  adminEmail: string;
+  branding?: {
+    logoUrl?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    backgroundColor?: string;
+    textColor?: string;
+  };
+}): Promise<{ success: boolean; companyId?: string; error?: string }> {
+  ensureFirebaseIsOperational();
+  try {
+    // Check if slug already exists
+    const existingCompany = await getCompanyBySlug(companyData.slug);
+    if (existingCompany) {
+      return { success: false, error: 'A company with this slug already exists' };
+    }
+
+    // Create company document
+    const companiesCol = collection(db, 'companies');
+    const docRef = await addDoc(companiesCol, {
+      name: companyData.name,
+      slug: companyData.slug,
+      branding: companyData.branding,
+      adminEmail: companyData.adminEmail,
+      createdAt: serverTimestamp(),
+    });
+
+    console.log(`[firestoreService] Created company ${companyData.name} with ID: ${docRef.id}`);
+    return { success: true, companyId: docRef.id };
+  } catch (error: any) {
+    console.error(`[firestoreService] Error creating company:`, error);
+    return { success: false, error: error.message || 'Failed to create company' };
   }
 }

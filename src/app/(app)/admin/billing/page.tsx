@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DollarSign, Loader2, TriangleAlert } from "lucide-react";
 import { useRole } from "@/context/role-context";
 import { StripeConnectForm } from "@/components/forms/stripe-connect-form";
+import { StripeProductsManagement } from "@/components/admin/stripe-products-management";
 import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from "@/components/ui/alert";
 
 
@@ -23,14 +24,14 @@ export default function AdminBillingPage() {
     );
   }
 
-  if (role !== 'super-admin') {
+  if (role !== 'admin' && role !== 'super-admin') {
       return (
         <div>
           <PageHeader title="Billing Management" description="Oversee client billing, invoices, and payment statuses." />
            <Alert variant="destructive">
             <TriangleAlert className="h-4 w-4" />
             <UiAlertTitle>Access Denied</UiAlertTitle>
-            <AlertDescription>You must be a Super Admin to manage Stripe settings.</AlertDescription>
+            <AlertDescription>You must be an Admin to manage Stripe settings.</AlertDescription>
           </Alert>
         </div>
       );
@@ -55,20 +56,10 @@ export default function AdminBillingPage() {
       <div className="mt-8">
         <StripeConnectForm companyProfile={companyProfile} />
       </div>
-      <Card className="mt-8 shadow-light">
-        <CardHeader>
-          <CardTitle className="font-headline flex items-center">
-            <DollarSign className="mr-2 h-6 w-6 text-primary" />
-            Billing Overview
-          </CardTitle>
-          <CardDescription>
-            Once Stripe is connected, this area will show billing activity, outstanding invoices, and financial reports.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-           <p className="text-sm text-muted-foreground">This feature is pending Stripe connection.</p>
-        </CardContent>
-      </Card>
+      
+      <div className="mt-8">
+        <StripeProductsManagement companyProfile={companyProfile} />
+      </div>
     </div>
   );
 }

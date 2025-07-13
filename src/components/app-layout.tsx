@@ -172,7 +172,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen collapsible="icon">
-      <Sidebar side="left" variant="sidebar" className="border-r shadow-light">
+      <Sidebar side="left" variant="sidebar" className="border-r shadow-light" data-sidebar>
         <SidebarHeader>
           <AppLogo />
         </SidebarHeader>
