@@ -10,7 +10,6 @@ const nextConfig: NextConfig = {
   },
   
   // Production optimizations
-  swcMinify: true,
   poweredByHeader: false,
   
   // Compiler options for production
