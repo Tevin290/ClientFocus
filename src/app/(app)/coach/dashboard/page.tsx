@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
@@ -7,7 +8,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart as BarChartIcon, Users, FilePlus, Loader2, TriangleAlert, Building } from "lucide-react";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { useRole } from '@/context/role-context';
 import { useOnboarding } from '@/context/onboarding-context';
@@ -42,63 +43,45 @@ export default function CoachDashboardPage() {
   useEffect(() => {
     const coachTourSteps = [
       {
+        id: 'welcome',
         target: 'body',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Welcome to your Coach Dashboard!</h3>
-            <p>This is your coaching command center. Let's explore the key features to help you manage your coaching practice effectively.</p>
-          </div>
-        ),
-        placement: 'center' as const,
+        title: 'Welcome to your Coach Dashboard!',
+        content: 'This is your coaching command center. Let\'s explore the key features to help you manage your coaching practice effectively.',
+        placement: 'bottom' as const,
       },
       {
+        id: 'company-info',
         target: '[data-tour="company-info"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Your Company</h3>
-            <p>See which company you belong to and access your company's public page. This helps you stay connected with your organization.</p>
-          </div>
-        ),
+        title: 'Your Company',
+        content: 'See which company you belong to and access your company\'s public page. This helps you stay connected with your organization.',
         placement: 'bottom' as const,
       },
       {
+        id: 'metrics',
         target: '[data-tour="metrics"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Your Performance</h3>
-            <p>Track your sessions this month and see how many active clients you're working with. These metrics help you understand your coaching impact.</p>
-          </div>
-        ),
+        title: 'Your Performance',
+        content: 'Track your sessions this month and see how many active clients you\'re working with. These metrics help you understand your coaching impact.',
         placement: 'bottom' as const,
       },
       {
+        id: 'log-session',
         target: '[data-tour="log-session"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Log New Sessions</h3>
-            <p>Quickly log a new coaching session right from your dashboard. Keep your records up-to-date with just one click!</p>
-          </div>
-        ),
+        title: 'Log New Sessions',
+        content: 'Quickly log a new coaching session right from your dashboard. Keep your records up-to-date with just one click!',
         placement: 'left' as const,
       },
       {
+        id: 'chart',
         target: '[data-tour="chart"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Session History</h3>
-            <p>View your session breakdown over the last 6 months. Track your full sessions vs half sessions to understand your coaching patterns.</p>
-          </div>
-        ),
+        title: 'Session History',
+        content: 'View your session breakdown over the last 6 months. Track your full sessions vs half sessions to understand your coaching patterns.',
         placement: 'top' as const,
       },
       {
+        id: 'sidebar',
         target: '[data-sidebar]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Coach Navigation</h3>
-            <p>Use the sidebar to access all coach features: log sessions, view your session history, manage clients, and update settings.</p>
-          </div>
-        ),
+        title: 'Coach Navigation',
+        content: 'Use the sidebar to access all coach features: log sessions, view your session history, manage clients, and update settings.',
         placement: 'right' as const,
       },
     ];

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
@@ -5,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Users, Activity, Briefcase, Loader2, TriangleAlert, Building } from "lucide-react";
-import { BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar, ResponsiveContainer } from 'recharts';
+import { BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -38,8 +39,8 @@ export default function AdminDashboardPage() {
   const { addSteps } = useOnboarding();
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [companies, setCompanies] = useState<CompanyProfile[]>([]);
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [, setCompanies] = useState<Array<CompanyProfile>>([]);
+  const [, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCoachId, setSelectedCoachId] = useState<string>('all');
   const { toast } = useToast();
@@ -49,63 +50,45 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const adminTourSteps = [
       {
+        id: 'welcome',
         target: 'body',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Welcome to your Admin Dashboard!</h3>
-            <p>This is where you manage your company's coaching operations. Let's take a quick tour to get you started.</p>
-          </div>
-        ),
-        placement: 'center' as const,
+        title: 'Welcome to your Admin Dashboard!',
+        content: 'This is where you manage your company\'s coaching operations. Let\'s take a quick tour to get you started.',
+        placement: 'bottom' as const,
       },
       {
+        id: 'company-info',
         target: '[data-tour="company-info"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Company Information</h3>
-            <p>Here you can see your company details including name, slug, and public URL. Share your company URL with coaches and clients for easy signup.</p>
-          </div>
-        ),
+        title: 'Company Information',
+        content: 'Here you can see your company details including name, slug, and public URL. Share your company URL with coaches and clients for easy signup.',
         placement: 'bottom' as const,
       },
       {
+        id: 'metrics',
         target: '[data-tour="metrics"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Key Metrics</h3>
-            <p>Monitor your company's performance with sessions this month, active coaches, and pending reviews. These cards give you a quick overview of your business.</p>
-          </div>
-        ),
+        title: 'Key Metrics',
+        content: 'Monitor your company\'s performance with sessions this month, active coaches, and pending reviews. These cards give you a quick overview of your business.',
         placement: 'bottom' as const,
       },
       {
+        id: 'chart',
         target: '[data-tour="chart"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Session Analytics</h3>
-            <p>Track session trends over time and filter by specific coaches. Use this data to understand your business patterns and growth.</p>
-          </div>
-        ),
+        title: 'Session Analytics',
+        content: 'Track session trends over time and filter by specific coaches. Use this data to understand your business patterns and growth.',
         placement: 'top' as const,
       },
       {
+        id: 'management-links',
         target: '[data-tour="management-links"]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Management Tools</h3>
-            <p>Access coach management, billing setup, and other administrative functions. These tools help you run your coaching business effectively.</p>
-          </div>
-        ),
+        title: 'Management Tools',
+        content: 'Access coach management, billing setup, and other administrative functions. These tools help you run your coaching business effectively.',
         placement: 'top' as const,
       },
       {
+        id: 'sidebar',
         target: '[data-sidebar]',
-        content: (
-          <div>
-            <h3 className="font-semibold mb-2">Navigation Sidebar</h3>
-            <p>Use the sidebar to navigate between different sections: Sessions, Coaches, Billing, and Settings. Everything you need is just a click away!</p>
-          </div>
-        ),
+        title: 'Navigation Sidebar',
+        content: 'Use the sidebar to navigate between different sections: Sessions, Coaches, Billing, and Settings. Everything you need is just a click away!',
         placement: 'right' as const,
       },
     ];

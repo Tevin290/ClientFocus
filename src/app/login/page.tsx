@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useRole } from '@/context/role-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +24,6 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
   const { role, isLoading: isRoleLoading, user } = useRole();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [firebaseNotConfigured, setFirebaseNotConfigured] = useState(false);
@@ -88,13 +86,16 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       // RoleContext will handle fetching profile and redirecting based on role
       toast({ title: 'Login Successful', description: `Welcome back!` });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Firebase Login Error:', error);
       let errorMessage = 'Login failed. Please check your email and password or try again.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid email or password.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'The email address format is not valid.';
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string };
+        if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
+          errorMessage = 'Invalid email or password.';
+        } else if (firebaseError.code === 'auth/invalid-email') {
+          errorMessage = 'The email address format is not valid.';
+        }
       }
       toast({ title: 'Login Failed', description: errorMessage, variant: 'destructive' });
     } finally {
@@ -178,7 +179,7 @@ export default function LoginPage() {
               Looking for your company login?
             </p>
             <p className="text-muted-foreground text-xs">
-              Visit: <code className="text-primary">yoursite.com/company-name/login</code>
+              Visit: <code className="text-primary">{process.env.NEXT_PUBLIC_APP_URL}/company-name/login</code>
             </p>
           </div>
           {firebaseNotConfigured && (

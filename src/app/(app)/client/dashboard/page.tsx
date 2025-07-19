@@ -18,43 +18,31 @@ export default function ClientDashboardPage() {
     useEffect(() => {
         const clientTourSteps = [
             {
+                id: 'welcome',
                 target: 'body',
-                content: (
-                    <div>
-                        <h3 className="font-semibold mb-2">Welcome to ClientFocus!</h3>
-                        <p>This is your personal dashboard where you can track your coaching journey and access all your session information.</p>
-                    </div>
-                ),
-                placement: 'center' as const,
-            },
-            {
-                target: '[data-tour="session-history"]',
-                content: (
-                    <div>
-                        <h3 className="font-semibold mb-2">Your Session History</h3>
-                        <p>Click here to view all your past coaching sessions, including notes and recordings from your coach. Track your progress over time!</p>
-                    </div>
-                ),
+                title: 'Welcome to ClientFocus!',
+                content: 'This is your personal dashboard where you can track your coaching journey and access all your session information.',
                 placement: 'bottom' as const,
             },
             {
+                id: 'session-history',
+                target: '[data-tour="session-history"]',
+                title: 'Your Session History',
+                content: 'Click here to view all your past coaching sessions, including notes and recordings from your coach. Track your progress over time!',
+                placement: 'bottom' as const,
+            },
+            {
+                id: 'coming-soon',
                 target: '[data-tour="coming-soon"]',
-                content: (
-                    <div>
-                        <h3 className="font-semibold mb-2">More Features Coming</h3>
-                        <p>We're working on exciting new features like session scheduling and profile management. Stay tuned for updates!</p>
-                    </div>
-                ),
+                title: 'More Features Coming',
+                content: 'We\'re working on exciting new features like session scheduling and profile management. Stay tuned for updates!',
                 placement: 'top' as const,
             },
             {
+                id: 'sidebar',
                 target: '[data-sidebar]',
-                content: (
-                    <div>
-                        <h3 className="font-semibold mb-2">Easy Navigation</h3>
-                        <p>Use the sidebar to access your session history, settings, and other features as they become available.</p>
-                    </div>
-                ),
+                title: 'Easy Navigation',
+                content: 'Use the sidebar to access your session history, settings, and other features as they become available.',
                 placement: 'right' as const,
             },
         ];

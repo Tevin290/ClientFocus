@@ -21,12 +21,24 @@ export async function createConnectOAuthLink(
       throw new Error(`Stripe Connect client ID for ${mode} mode is not configured.`);
     }
 
+    // Use different redirect URIs for test vs live modes
+    const getRedirectUri = (mode: 'test' | 'live') => {
+      if (mode === 'live') {
+        // For live mode, use HTTPS and production URL
+        const productionUrl = process.env.NEXT_PUBLIC_APP_URL;
+        return `${productionUrl}/api/stripe/connect/callback`.replace('http://', 'https://');
+      } else {
+        // For test mode, use the development URL (can be HTTP)
+        return `${process.env.NEXT_PUBLIC_APP_URL}/api/stripe/connect/callback`;
+      }
+    };
+
     const baseUrl = 'https://connect.stripe.com/oauth/authorize';
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
       scope: 'read_write',
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/stripe/connect/callback`,
+      redirect_uri: getRedirectUri(mode),
       state: `${companyId}:${mode}`, // Pass company ID and mode in state
     });
 
@@ -49,7 +61,7 @@ export async function createConnectAccountLink(
 ): Promise<{ url: string | null; newAccountId?: string; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
     
     let finalStripeAccountId = stripeAccountId;
     let newAccountId: string | undefined = undefined;
@@ -103,7 +115,7 @@ export async function createCheckoutSetupSession(
 ): Promise<{ url: string | null; newStripeCustomerId?: string; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     let stripeCustomerId = existingStripeCustomerId;
     let newStripeCustomerId: string | undefined = undefined;
@@ -149,7 +161,7 @@ export async function createProduct(
 ): Promise<{ product: any | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     const product = await stripe.products.create({
       name,
@@ -178,7 +190,7 @@ export async function createPrice(
 ): Promise<{ price: any | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     const price = await stripe.prices.create({
       product: productId,
@@ -204,7 +216,7 @@ export async function getProducts(
 ): Promise<{ products: any[] | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     const products = await stripe.products.list({
       limit: 100,
@@ -229,7 +241,7 @@ export async function getPrices(
 ): Promise<{ prices: any[] | null; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     const prices = await stripe.prices.list({
       limit: 100,

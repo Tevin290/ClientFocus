@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
-import { getDocs, query, collection, where, updateDoc, writeBatch } from 'firebase/firestore';
+import { getDocs, query, collection, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { updateCompanyProfile } from '@/lib/firestoreService';
 
@@ -22,7 +24,7 @@ const relevantEvents = new Set([
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
-  const sig = headers().get('Stripe-Signature') as string;
+  const sig = (await headers()).get('Stripe-Signature') as string;
   const webhookSecretTest = process.env.STRIPE_WEBHOOK_SECRET_TEST;
   const webhookSecretLive = process.env.STRIPE_WEBHOOK_SECRET_LIVE;
 

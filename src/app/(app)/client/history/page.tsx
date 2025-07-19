@@ -31,7 +31,8 @@ export default function ClientHistoryPage() {
       const fetchSessions = async () => {
         setIsLoadingSessions(true);
         try {
-          const fetchedSessions = await getClientSessions(user.uid, userProfile.companyId); 
+          const companyId = userProfile.companyId!;
+          const fetchedSessions = await getClientSessions(user.uid, companyId); 
           setSessions(fetchedSessions);
         } catch (error) {
           console.error("Failed to fetch client sessions:", error);

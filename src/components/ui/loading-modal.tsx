@@ -45,7 +45,7 @@ export function LoadingModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md" hideCloseButton={status === 'loading'}>
+      <DialogContent className={`sm:max-w-md ${status === 'loading' ? '[&>button]:hidden' : ''}`}>
         <div className="flex flex-col items-center justify-center space-y-4 py-8">
           {getIcon()}
           

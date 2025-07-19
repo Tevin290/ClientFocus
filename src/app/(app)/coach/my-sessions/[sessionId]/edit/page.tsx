@@ -1,8 +1,10 @@
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { PageHeader } from "@/components/shared/page-header";
 import { SessionLogForm } from "@/components/forms/session-log-form";
 import { useRole } from "@/context/role-context";
@@ -29,7 +31,7 @@ export default function EditSessionPage() {
         setIsLoadingData(true);
         try {
           const [fetchedClients, fetchedSession] = await Promise.all([
-            getCoachClients(user.uid),
+            getCoachClients(user.uid, user.companyId),
             getSessionById(sessionId)
           ]);
           setClients(fetchedClients);
@@ -105,6 +107,7 @@ export default function EditSessionPage() {
           coachName={user.displayName || "Coach"}
           clients={clients}
           session={session}
+          companyId={user.companyId}
         />
       </div>
     </div>

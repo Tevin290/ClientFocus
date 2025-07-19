@@ -2,7 +2,6 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Users, Target, Award, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import CompanyLayout from '@/components/company/company-layout';

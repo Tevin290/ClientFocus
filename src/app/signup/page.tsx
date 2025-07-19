@@ -1,3 +1,5 @@
+ 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
@@ -26,14 +28,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, ChevronsRight, Crown } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, Crown } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
-import { getAllCoaches, type UserProfile, type UserProfile as CoachProfile } from '@/lib/firestoreService';
+import { getAllCoaches, UserProfile as CoachProfile } from '@/lib/firestoreService';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -390,7 +392,7 @@ export default function SignupPage() {
                 <FormField
                   control={form.control}
                   name="coachId"
-                  render={({ field }) => (
+                  render={() => (
                     <FormItem>
                       <FormLabel>Your Coach</FormLabel>
                       <FormControl>
@@ -474,7 +476,7 @@ export default function SignupPage() {
                     Looking to join a company?
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Visit: <code className="text-primary">yoursite.com/company-name/signup</code>
+                    Visit: <code className="text-primary">{process.env.NEXT_PUBLIC_APP_URL}/company-name/signup</code>
                   </p>
                 </div>
               </div>

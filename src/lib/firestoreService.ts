@@ -5,6 +5,9 @@ import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
 import type { User as FirebaseUser } from 'firebase/auth';
 
+// Re-export the Session type for convenience
+export type { Session };
+
 function ensureFirebaseIsOperational() {
   if (!isFirebaseConfigured()) {
     const errorMessage = "[firestoreService] Firebase is not configured. Please add your Firebase config to src/lib/firebase.ts or environment variables.";
@@ -526,10 +529,13 @@ export async function updateCompanyProfile(companyId: string, updates: Partial<C
   ensureFirebaseIsOperational();
   try {
     const companyDocRef = doc(db, 'companies', companyId);
+    console.log(`[firestoreService] Updating company ${companyId} with:`, updates);
     await updateDoc(companyDocRef, updates);
+    console.log(`[firestoreService] Successfully updated company ${companyId}`);
   } catch (error: any) {
     console.error(`[firestoreService] Error updating company profile for companyId ${companyId}:`, error);
-    throw new Error(`Failed to update company profile.`);
+    console.error(`[firestoreService] Error code: ${error.code}, message: ${error.message}`);
+    throw new Error(`Failed to update company profile: ${error.message}`);
   }
 }
 

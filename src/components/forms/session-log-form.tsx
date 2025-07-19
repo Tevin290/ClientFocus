@@ -133,7 +133,7 @@ export function SessionLogForm({ coachId, coachName, companyId, clients, session
           sessionDate: new Date(`${data.sessionDate}T${data.sessionTime}`).toISOString(),
           sessionType: data.sessionType,
           videoLink: data.videoLink,
-          sessionNotes: data.sessionNotes,
+          notes: data.sessionNotes,
           summary: data.summary,
           // Client and company cannot be changed in edit mode, so we don't include it here
         };

@@ -11,6 +11,7 @@ import { useRouter, usePathname } from 'next/navigation';
 export type UserRole = 'admin' | 'super-admin' | 'coach' | 'client' | null;
 
 interface AuthUser {
+  companyId: string;
   uid: string;
   email: string | null;
   displayName: string | null;
@@ -39,15 +40,15 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
 
   const fetchFullProfile = React.useCallback(async (firebaseUser: FirebaseUser) => {
-    setUser({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-    });
-
     try {
         const profile = await getUserProfile(firebaseUser.uid);
         if (profile) {
+            setUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                companyId: profile.companyId ?? '',
+            });
             setUserProfile(profile);
             setRoleState(profile.role);
             if (profile.companyId) {
@@ -68,7 +69,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         setCompanyProfile(null);
         setRoleState(null);
     }
-  }, []);
+  }, [setUser, setUserProfile, setCompanyProfile, setRoleState]);
 
   React.useEffect(() => {
     if (!isFirebaseConfigured()) {

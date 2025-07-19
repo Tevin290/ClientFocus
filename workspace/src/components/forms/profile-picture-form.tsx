@@ -14,7 +14,6 @@ import { updateUserProfile } from '@/lib/firestoreService';
 import { updateProfile } from 'firebase/auth';
 import type { UserProfile } from '@/lib/firestoreService';
 import { cn } from '@/lib/utils';
-import { FormDescription, FormLabel, FormMessage } from '../ui/form';
 
 interface ProfilePictureFormProps {
   user: { uid: string; email: string | null; displayName: string | null; };
@@ -29,7 +28,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
   const { toast } = useToast();
   const { refetchUserProfile } = useRole();
   const [isUploading, setIsUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(userProfile.photoURL);
+  const [preview, setPreview] = useState<string | null>(userProfile.photoURL ?? null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -156,7 +155,7 @@ export function ProfilePictureForm({ user, userProfile }: ProfilePictureFormProp
 
   const handleCancel = () => {
     setSelectedFile(null);
-    setPreview(userProfile.photoURL);
+    setPreview(userProfile.photoURL ?? null);
     setError(null);
   };
 

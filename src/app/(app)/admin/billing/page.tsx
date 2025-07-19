@@ -8,10 +8,36 @@ import { useRole } from "@/context/role-context";
 import { StripeConnectForm } from "@/components/forms/stripe-connect-form";
 import { StripeProductsManagement } from "@/components/admin/stripe-products-management";
 import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from "@/components/ui/alert";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 
 export default function AdminBillingPage() {
-  const { companyProfile, isLoading, role } = useRole();
+  const { companyProfile, isLoading, role, refetchCompanyProfile } = useRole();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    const mode = searchParams.get('mode');
+
+    if (success === 'stripe_connected') {
+      toast({
+        title: 'Stripe Connected',
+        description: `Successfully connected your Stripe account in ${mode} mode.`,
+      });
+      // Refresh company profile to show updated status
+      refetchCompanyProfile();
+    } else if (error) {
+      toast({
+        title: 'Connection Failed',
+        description: decodeURIComponent(error),
+        variant: 'destructive',
+      });
+    }
+  }, [searchParams, toast, refetchCompanyProfile]);
 
   if (isLoading) {
     return (

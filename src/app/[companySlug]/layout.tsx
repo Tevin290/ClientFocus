@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -7,7 +8,7 @@ import { Loader2 } from 'lucide-react';
 
 export default function CompanyLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
-  const [company, setCompany] = useState<CompanyProfile | null>(null);
+  const [,setCompany] = useState<CompanyProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 

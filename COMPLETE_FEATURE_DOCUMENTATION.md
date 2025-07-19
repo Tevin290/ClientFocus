@@ -21,7 +21,7 @@
 
 ClientFocus is a multi-tenant coaching platform that enables coaching companies to operate as isolated SaaS platforms with their own branding, users, and billing systems. Each company gets:
 
-- **White-label URLs**: `yourdomain.com/company-slug`
+- **White-label URLs**: `siteurl.com/company-slug`
 - **Custom branding**: Logo, colors, and company name
 - **Isolated data**: Complete separation between companies
 - **Role-based access**: Different permissions for different user types
@@ -825,11 +825,21 @@ The `CompanyLayout` component provides:
 
 ## Onboarding Tours
 
-### **React Joyride Integration**
-- **Professional Tour Experience**: Smooth, interactive guidance system
-- **Role-Specific Content**: Customized tours for different user types
-- **Progress Tracking**: Automatic saving of tour completion status
-- **Flexible Control**: Skip, replay, or pause tours at any time
+### **Custom Onboarding System**
+- **World-Class UI/UX**: Beautiful gradient backgrounds, smooth animations, and micro-interactions
+- **Advanced Functionality**: Auto-scroll to targets, keyboard navigation, progress tracking
+- **Role-Specific Content**: Customized tours for different user types (Admin, Coach, Client)
+- **Persistent State**: Automatic saving of tour completion status in localStorage
+- **Accessibility Features**: Full keyboard navigation, screen reader support, focus management
+- **Responsive Design**: Works seamlessly on all devices and screen sizes
+- **Custom Actions**: Execute custom code at specific steps for enhanced UX
+
+### **Key Features**
+- **Smart Positioning**: Auto-scroll to target elements with smooth animations
+- **Keyboard Shortcuts**: `→`/`Enter`/`Space` (next), `←` (previous), `Esc` (close), `Ctrl+S` (skip)
+- **Visual Feedback**: Animated spotlight effects, progress bars, and smooth transitions
+- **Flexible Placement**: Top, bottom, left, right positioning with smart viewport adjustment
+- **Custom Styling**: Beautiful CSS animations with dark mode support
 
 ### **Admin Onboarding Tour**
 **Tour Steps**:

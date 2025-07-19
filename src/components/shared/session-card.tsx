@@ -1,13 +1,14 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Video, FileText, ClockIcon, Users, CheckCircle, DollarSign, XCircle } from "lucide-react";
+import { CalendarDays, Video, FileText, ClockIcon, CheckCircle, DollarSign, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface Session {
   id: string;
   clientId?: string;
   clientName?: string; // Optional for client view if they are the client
+  coachId?: string; // The coach who conducted the session
   coachName?: string; // Optional for coach view if they are the coach
   sessionDate: string;
   sessionType: 'Full' | 'Half';

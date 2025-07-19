@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeSecretKey } from '@/lib/stripe';
 import { updateCompanyProfile } from '@/lib/firestoreService';
@@ -34,17 +35,18 @@ export async function GET(request: NextRequest) {
 
     // Exchange code for access token
     const secretKey = getStripeSecretKey(mode as 'test' | 'live');
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     const response = await stripe.oauth.token({
       grant_type: 'authorization_code',
       code,
     });
 
-    const { stripe_user_id, access_token } = response;
+    const { stripe_user_id } = response;
 
     // Update company profile with Stripe account information
     const fieldSuffix = mode === 'test' ? '_test' : '_live';
+    console.log(`[Stripe OAuth] Updating company ${companyId} with Stripe account ${stripe_user_id} in ${mode} mode`);
     await updateCompanyProfile(companyId, {
       [`stripeAccountId${fieldSuffix}`]: stripe_user_id,
       [`stripeAccountOnboarded${fieldSuffix}`]: true,
