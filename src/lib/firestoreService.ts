@@ -62,7 +62,7 @@ export interface NewSessionData {
   clientName: string;
   clientEmail: string;
   sessionDate: Date;
-  sessionType: 'Full' | 'Half';
+  sessionType: string;
   videoLink?: string | '';
   sessionNotes: string;
   summary?: string | '';

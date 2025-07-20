@@ -11,7 +11,7 @@ export interface Session {
   coachId?: string; // The coach who conducted the session
   coachName?: string; // Optional for coach view if they are the coach
   sessionDate: string;
-  sessionType: 'Full' | 'Half';
+  sessionType: string;
   notes?: string; // Could be full notes or summary
   summary?: string;
   videoLink?: string;
