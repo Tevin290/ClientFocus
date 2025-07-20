@@ -164,7 +164,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success') && pathname !== '/signup') {
+  if (!role && pathname !== '/login' && pathname !== '/signup') {
     return null; // Let RoleContext handle the redirect
   }
 

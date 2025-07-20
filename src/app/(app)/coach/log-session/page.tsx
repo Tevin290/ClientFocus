@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function CoachLogSessionPage() {
-  const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
+  const { user, userProfile, companyProfile, role, isLoading: isRoleLoading } = useRole();
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const { toast } = useToast();
@@ -53,7 +53,7 @@ export default function CoachLogSessionPage() {
     );
   }
 
-  if (role !== 'coach' || !user || !userProfile?.companyId) {
+  if (role !== 'coach' || !user || !userProfile?.companyId || !companyProfile) {
     return (
       <div>
         <PageHeader title="Log New Session" description="Record the details of your latest coaching session." />
@@ -93,6 +93,7 @@ export default function CoachLogSessionPage() {
           coachName={user.displayName || "Coach"} 
           clients={clients}
           companyId={userProfile.companyId}
+          companyProfile={companyProfile}
         />
       </div>
     </div>

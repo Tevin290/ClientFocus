@@ -116,8 +116,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
     } 
     else {
       const isPublicRoute = isAuthPage || isCompanyAuthPage || isCompanyLandingPage || 
-                           pathname === '/' || pathname.startsWith('/coach/log-session/success') || 
-                           isStripeReturn;
+                           pathname === '/' || isStripeReturn;
       const isProtectedRoute = !isPublicRoute;
       
       if (isProtectedRoute) {

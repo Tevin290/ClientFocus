@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function EditSessionPage() {
-  const { user, role, isLoading: isRoleLoading } = useRole();
+  const { user, companyProfile, role, isLoading: isRoleLoading } = useRole();
   const [clients, setClients] = useState<UserProfile[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -68,7 +68,7 @@ export default function EditSessionPage() {
     );
   }
 
-  if (role !== 'coach' || !user) {
+  if (role !== 'coach' || !user || !companyProfile) {
     return (
       <div>
         <PageHeader title="Edit Session" />
@@ -108,6 +108,7 @@ export default function EditSessionPage() {
           clients={clients}
           session={session}
           companyId={user.companyId}
+          companyProfile={companyProfile}
         />
       </div>
     </div>
