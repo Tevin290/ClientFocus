@@ -127,7 +127,7 @@ export default function CompanyLayout({ children, hideHeader = false }: CompanyL
       <footer className="border-t py-6 px-4 bg-card/50 mt-auto">
         <div className="container mx-auto text-center">
           <p className="text-sm text-muted-foreground">
-            © 2024 {company.name}. All rights reserved.
+            © 2025 {company.name}. All rights reserved.
           </p>
         </div>
       </footer>
