@@ -1,9 +1,8 @@
 
 import { collection, serverTimestamp, doc, getDoc, updateDoc, Timestamp, setDoc, type FieldValue, query, where, orderBy, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured, auth } from './firebase';
+import { db, isFirebaseConfigured } from './firebase';
 import type { Session } from '@/components/shared/session-card';
 import type { UserRole } from '@/context/role-context';
-import type { User as FirebaseUser } from 'firebase/auth';
 
 // Re-export the Session type for convenience
 export type { Session };
@@ -180,9 +179,13 @@ export async function getClientSessions(clientId: string, companyId: string): Pr
   } catch (error: any) {
     console.error(`Detailed Firebase Error in getClientSessions for clientID ${clientId}:`, error);
     if (error.code === 'failed-precondition') {
-        throw new Error(`Failed to fetch client sessions. A Firestore index is required. Please check the browser's developer console for a link to create it.`);
+        const indexError = new Error(`Failed to fetch client sessions. A Firestore index is required. Please check the browser's developer console for a link to create it.`) as Error & { digest: string };
+        indexError.digest = 'FIRESTORE_INDEX_REQUIRED';
+        throw indexError;
     }
-    throw new Error(`Failed to fetch client sessions for client ID ${clientId}. See server logs for details.`);
+    const generalError = new Error(`Failed to fetch client sessions for client ID ${clientId}. See server logs for details.`) as Error & { digest: string };
+    generalError.digest = 'CLIENT_SESSIONS_FETCH_ERROR';
+    throw generalError;
   }
 }
 
