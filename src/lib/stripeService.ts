@@ -2,10 +2,53 @@
 'use server';
 
 import Stripe from 'stripe';
-import { headers } from 'next/headers';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { getStripeSecretKey } from './stripe';
+
+/**
+ * Creates a Stripe Connect OAuth link for a company.
+ * This allows companies to authorize via Stripe's OAuth flow.
+ */
+export async function createConnectOAuthLink(
+    companyId: string,
+    mode: 'test' | 'live'
+): Promise<{ url: string | null; error?: string }> {
+  try {
+    const clientId = mode === 'test' 
+      ? process.env.STRIPE_CONNECT_CLIENT_ID_TEST 
+      : process.env.STRIPE_CONNECT_CLIENT_ID_LIVE;
+    
+    if (!clientId) {
+      throw new Error(`Stripe Connect client ID for ${mode} mode is not configured.`);
+    }
+
+    // Use different redirect URIs for test vs live modes
+    const getRedirectUri = (mode: 'test' | 'live') => {
+      if (mode === 'live') {
+        // For live mode, use HTTPS and production URL
+        const productionUrl = process.env.NEXT_PUBLIC_APP_URL;
+        return `${productionUrl}/api/stripe/connect/callback`.replace('http://', 'https://');
+      } else {
+        // For test mode, use the development URL (can be HTTP)
+        return `${process.env.NEXT_PUBLIC_APP_URL}/api/stripe/connect/callback`;
+      }
+    };
+
+    const baseUrl = 'https://connect.stripe.com/oauth/authorize';
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      scope: 'read_write',
+      redirect_uri: getRedirectUri(mode),
+      state: `${companyId}:${mode}`, // Pass company ID and mode in state
+    });
+
+    return { url: `${baseUrl}?${params.toString()}` };
+
+  } catch (error: any) {
+    console.error('[Stripe Service] Error creating Connect OAuth link:', error);
+    return { url: null, error: error.message || 'Failed to create Stripe OAuth link.' };
+  }
+}
 
 /**
  * Creates a Stripe Connect onboarding link for a company.
@@ -18,7 +61,7 @@ export async function createConnectAccountLink(
 ): Promise<{ url: string | null; newAccountId?: string; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
     
     let finalStripeAccountId = stripeAccountId;
     let newAccountId: string | undefined = undefined;
@@ -72,7 +115,7 @@ export async function createCheckoutSetupSession(
 ): Promise<{ url: string | null; newStripeCustomerId?: string; error?: string }> {
   try {
     const secretKey = getStripeSecretKey(mode);
-    const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20', typescript: true });
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     let stripeCustomerId = existingStripeCustomerId;
     let newStripeCustomerId: string | undefined = undefined;
@@ -104,5 +147,112 @@ export async function createCheckoutSetupSession(
   } catch (error: any) {
     console.error('[Stripe Service] Error creating Checkout setup session:', error);
     return { url: null, error: error.message || 'Failed to create payment setup session.' };
+  }
+}
+
+/**
+ * Creates a product in the connected Stripe account
+ */
+export async function createProduct(
+  stripeAccountId: string,
+  name: string,
+  description: string,
+  mode: 'test' | 'live'
+): Promise<{ product: any | null; error?: string }> {
+  try {
+    const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
+
+    const product = await stripe.products.create({
+      name,
+      description,
+      type: 'service',
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    return { product };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error creating product:', error);
+    return { product: null, error: error.message || 'Failed to create product.' };
+  }
+}
+
+/**
+ * Creates a price for a product in the connected Stripe account
+ */
+export async function createPrice(
+  stripeAccountId: string,
+  productId: string,
+  unitAmount: number,
+  currency: string = 'usd',
+  mode: 'test' | 'live'
+): Promise<{ price: any | null; error?: string }> {
+  try {
+    const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
+
+    const price = await stripe.prices.create({
+      product: productId,
+      unit_amount: unitAmount,
+      currency,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    return { price };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error creating price:', error);
+    return { price: null, error: error.message || 'Failed to create price.' };
+  }
+}
+
+/**
+ * Gets all products for a connected Stripe account
+ */
+export async function getProducts(
+  stripeAccountId: string,
+  mode: 'test' | 'live'
+): Promise<{ products: any[] | null; error?: string }> {
+  try {
+    const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
+
+    const products = await stripe.products.list({
+      limit: 100,
+      active: true,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    return { products: products.data };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error fetching products:', error);
+    return { products: null, error: error.message || 'Failed to fetch products.' };
+  }
+}
+
+/**
+ * Gets all prices for a connected Stripe account
+ */
+export async function getPrices(
+  stripeAccountId: string,
+  mode: 'test' | 'live'
+): Promise<{ prices: any[] | null; error?: string }> {
+  try {
+    const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
+
+    const prices = await stripe.prices.list({
+      limit: 100,
+      active: true,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    return { prices: prices.data };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error fetching prices:', error);
+    return { prices: null, error: error.message || 'Failed to fetch prices.' };
   }
 }

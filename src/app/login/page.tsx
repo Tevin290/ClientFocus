@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useRole } from '@/context/role-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +24,6 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
   const { role, isLoading: isRoleLoading, user } = useRole();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [firebaseNotConfigured, setFirebaseNotConfigured] = useState(false);
@@ -53,6 +51,16 @@ export default function LoginPage() {
 
   // Redirection logic is now centralized in RoleContext
 
+  // Check if email is allowed to use root login (admins only)
+  const isAdminEmail = (email: string): boolean => {
+    const normalizedEmail = email.toLowerCase();
+    const SUPER_ADMIN_EMAIL = 'supersuper@hmperform.com';
+    const ADMIN_DOMAINS = ['@hmperform.com']; // Add your admin domains here
+    
+    return normalizedEmail === SUPER_ADMIN_EMAIL || 
+           ADMIN_DOMAINS.some(domain => normalizedEmail.endsWith(domain));
+  };
+
   const handleLogin: SubmitHandler<LoginFormValues> = async (data) => {
     if (firebaseNotConfigured) {
       toast({
@@ -63,18 +71,31 @@ export default function LoginPage() {
       return;
     }
 
+    // Check if email is allowed for root login
+    if (!isAdminEmail(data.email)) {
+      toast({
+        title: "Access Restricted",
+        description: "This login is for platform administrators only. Please use your company's login page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoggingIn(true);
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       // RoleContext will handle fetching profile and redirecting based on role
       toast({ title: 'Login Successful', description: `Welcome back!` });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Firebase Login Error:', error);
       let errorMessage = 'Login failed. Please check your email and password or try again.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid email or password.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'The email address format is not valid.';
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string };
+        if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
+          errorMessage = 'Invalid email or password.';
+        } else if (firebaseError.code === 'auth/invalid-email') {
+          errorMessage = 'The email address format is not valid.';
+        }
       }
       toast({ title: 'Login Failed', description: errorMessage, variant: 'destructive' });
     } finally {
@@ -94,8 +115,8 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <LifeBuoy className="h-16 w-16 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-headline">Welcome to ClientFocus</CardTitle>
-          <CardDescription className="text-md">Enter your credentials to log in</CardDescription>
+          <CardTitle className="text-3xl font-headline">Platform Administration</CardTitle>
+          <CardDescription className="text-md">Login for platform administrators only</CardDescription>
           {firebaseNotConfigured && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive text-sm rounded-md flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
@@ -149,10 +170,18 @@ export default function LoginPage() {
             </CardContent>
           </form>
         </Form>
-        <CardFooter className="flex flex-col items-center justify-center text-sm">
+        <CardFooter className="flex flex-col items-center justify-center text-sm space-y-3">
           <Link href="/signup" className="text-primary hover:underline">
-            Don&apos;t have an account? Sign Up
+            Platform Admin Sign Up
           </Link>
+          <div className="text-center">
+            <p className="text-muted-foreground text-xs">
+              Looking for your company login?
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Visit: <code className="text-primary">{process.env.NEXT_PUBLIC_APP_URL}/company-name/login</code>
+            </p>
+          </div>
           {firebaseNotConfigured && (
             <p className="mt-2 text-xs text-muted-foreground">
               Ensure Firebase is configured in <code>src/lib/firebase.ts</code>.

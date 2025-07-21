@@ -15,6 +15,6 @@ export function getStripeSecretKey(mode: 'test' | 'live'): string {
 // is less important than the key provided to `constructEvent`.
 // We'll initialize it with the live key as a default.
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_LIVE || '', {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-06-30.basil',
   typescript: true,
 });

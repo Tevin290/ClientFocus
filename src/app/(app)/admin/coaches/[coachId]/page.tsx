@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react/no-unescaped-entities */
 
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from '@/components/ui/button';
-import { Briefcase, Mail, BarChart2, Loader2, TriangleAlert, Eye, ArrowLeft, Users, ClipboardList } from 'lucide-react';
+import {  Mail, Loader2, TriangleAlert, ArrowLeft, Users, ClipboardList } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useRole } from '@/context/role-context';
 import { useToast } from '@/hooks/use-toast';

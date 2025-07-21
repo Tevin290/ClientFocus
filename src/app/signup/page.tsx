@@ -1,3 +1,5 @@
+ 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
@@ -26,20 +28,20 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, ChevronsRight, Crown } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, User, Briefcase, Mail, Building, LogIn, Crown } from 'lucide-react';
 
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/context/role-context';
-import { getAllCoaches, type UserProfile, type UserProfile as CoachProfile } from '@/lib/firestoreService';
+import { getAllCoaches, UserProfile as CoachProfile } from '@/lib/firestoreService';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// This function determines the role based on email address rules.
+// Root signup is restricted to platform administrators only
 const determineRole = (email: string | null): UserRole => {
   const normalizedEmail = (email || '').toLowerCase();
   const SUPER_ADMIN_EMAIL = 'supersuper@hmperform.com';
@@ -52,9 +54,19 @@ const determineRole = (email: string | null): UserRole => {
     return 'admin';
   }
   if (normalizedEmail.endsWith('@hmperform.com')) {
-    return 'coach';
+    return 'admin'; // Company admins use root signup
   }
-  return 'client';
+  return null; // Not allowed for root signup
+};
+
+// Check if email is allowed for root signup
+const isAdminEmail = (email: string): boolean => {
+  const normalizedEmail = email.toLowerCase();
+  const SUPER_ADMIN_EMAIL = 'supersuper@hmperform.com';
+  const ADMIN_DOMAINS = ['@hmperform.com']; // Add your admin domains here
+  
+  return normalizedEmail === SUPER_ADMIN_EMAIL || 
+         ADMIN_DOMAINS.some(domain => normalizedEmail.endsWith(domain));
 };
 
 const signupFormSchema = z
@@ -135,7 +147,11 @@ export default function SignupPage() {
         setCoaches(fetchedCoaches);
       } catch (error) {
         console.error("Failed to fetch coaches:", error);
-        toast({ title: "Could not load coaches", description: "There was an error fetching the list of available coaches.", variant: "destructive" });
+        // Don't show error toast if it's just a permission issue - coaches might not exist yet
+        if (error instanceof Error && !error.message.includes('permission-denied')) {
+          toast({ title: "Could not load coaches", description: "There was an error fetching the list of available coaches.", variant: "destructive" });
+        }
+        setCoaches([]); // Set empty array instead of leaving undefined
       } finally {
         setIsLoadingCoaches(false);
       }
@@ -176,6 +192,16 @@ export default function SignupPage() {
       return;
     }
 
+    // Check if email is allowed for root signup
+    if (!isAdminEmail(data.email)) {
+      toast({
+        title: 'Access Restricted', 
+        description: 'This signup is for platform administrators only. Please use your company\'s signup page.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setIsSigningUp(true);
 
     try {
@@ -189,6 +215,11 @@ export default function SignupPage() {
       // 3. Create the user's profile document in Firestore
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const role = determineRole(firebaseUser.email);
+      
+      // Prevent super-admin creation through signup
+      if (role === 'super-admin') {
+        throw new Error('Super admin accounts cannot be created through signup');
+      }
       
       const selectedCoach = coaches.find(c => c.uid === data.coachId);
       const companyId = role === 'client' ? selectedCoach?.companyId : DEFAULT_COMPANY_ID;
@@ -256,11 +287,11 @@ export default function SignupPage() {
             <Building className="h-12 w-12 text-primary transition-transform duration-300 ease-in-out hover:scale-110" />
           </Link>
           <CardTitle className="text-3xl font-headline font-bold text-foreground tracking-tight">
-            Create Your ClientFocus Account
+            Platform Administrator Signup
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2 text-base">
-            Join our platform to streamline your coaching and client management.
-            Your role is auto-assigned based on your email.
+            Create an administrator account for platform management.
+            Only authorized emails can register here.
           </CardDescription>
           {firebaseNotConfigured && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive text-sm rounded-md flex items-center gap-2">
@@ -361,7 +392,7 @@ export default function SignupPage() {
                 <FormField
                   control={form.control}
                   name="coachId"
-                  render={({ field }) => (
+                  render={() => (
                     <FormItem>
                       <FormLabel>Your Coach</FormLabel>
                       <FormControl>
@@ -430,15 +461,25 @@ export default function SignupPage() {
                 )}
                 {isSigningUp ? 'Creating Account...' : 'Create Account'}
               </Button>
-              <p className="mt-6 text-sm text-muted-foreground">
-                Already have an account?{' '}
-                <Link
-                  href="/login"
-                  className="font-medium text-primary hover:underline hover:text-primary/90 flex items-center gap-1 focus:outline-none focus:ring-1 focus:ring-primary focus:rounded-sm"
-                >
-                  <LogIn className="h-4 w-4" /> Log In
-                </Link>
-              </p>
+              <div className="mt-6 text-sm text-muted-foreground space-y-2">
+                <p>
+                  Already have an account?{' '}
+                  <Link
+                    href="/login"
+                    className="font-medium text-primary hover:underline hover:text-primary/90"
+                  >
+                    <LogIn className="h-4 w-4 inline mr-1" /> Platform Admin Login
+                  </Link>
+                </p>
+                <div className="text-center pt-2 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Looking to join a company?
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Visit: <code className="text-primary">{process.env.NEXT_PUBLIC_APP_URL}/company-name/signup</code>
+                  </p>
+                </div>
+              </div>
             </CardFooter>
           </form>
         </Form>

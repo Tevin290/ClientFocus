@@ -15,16 +15,17 @@ import { useToast } from '@/hooks/use-toast';
 import { summarizeSessionNotes, type SummarizeSessionNotesInput } from '@/ai/flows/summarize-session-notes';
 import { Bot, Save, Loader2, TriangleAlert, Edit } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { logSession, updateSession, type NewSessionData, type UserProfile, type Session } from '@/lib/firestoreService';
+import { logSession, updateSession, type NewSessionData, type UserProfile, type Session, type CompanyProfile } from '@/lib/firestoreService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { getProducts } from '@/lib/stripeService';
 
 const sessionLogSchema = z.object({
   clientId: z.string().min(1, 'Please select a client.'),
   sessionDate: z.string().min(1, "Session date is required"),
   sessionTime: z.string().min(1, 'Session time is required'),
   videoLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
-  sessionType: z.enum(['Full', 'Half'], { required_error: 'Session Type is required' }),
+  sessionType: z.string().min(1, 'Session Type is required'),
   sessionNotes: z.string().min(10, 'Session notes must be at least 10 characters').max(5000, 'Session notes cannot exceed 5000 characters'),
   summary: z.string().optional(),
 });
@@ -35,16 +36,22 @@ interface SessionLogFormProps {
   coachId: string;
   coachName: string;
   companyId: string;
+  companyProfile: CompanyProfile;
   clients: UserProfile[];
   session?: Session | null; // For edit mode
 }
 
-export function SessionLogForm({ coachId, coachName, companyId, clients, session }: SessionLogFormProps) {
+export function SessionLogForm({ coachId, coachName, companyId, companyProfile, clients, session }: SessionLogFormProps) {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [firebaseAvailable, setFirebaseAvailable] = useState(true);
+  const [sessionTypes, setSessionTypes] = useState<Array<{value: string, label: string}>>([
+    { value: 'Full', label: 'Full Session' },
+    { value: 'Half', label: 'Half Session' }
+  ]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   const isEditMode = !!session;
   const prefilledClientId = searchParams.get('clientId');
@@ -61,6 +68,51 @@ export function SessionLogForm({ coachId, coachName, companyId, clients, session
       });
     }
   }, [toast]);
+
+  // Fetch Stripe products on component mount
+  useEffect(() => {
+    const fetchStripeProducts = async () => {
+      const isTestMode = process.env.NODE_ENV !== 'production';
+      const stripeAccountId = isTestMode 
+        ? companyProfile.stripeAccountId_test 
+        : companyProfile.stripeAccountId_live;
+
+      if (!stripeAccountId) {
+        console.log('[SessionLogForm] No Stripe account ID found, using default session types');
+        return;
+      }
+
+      setLoadingProducts(true);
+      try {
+        const { products, error } = await getProducts(stripeAccountId, isTestMode ? 'test' : 'live');
+        
+        if (error) {
+          console.error('[SessionLogForm] Error fetching Stripe products:', error);
+          return;
+        }
+
+        if (products && products.length > 0) {
+          const productTypes = products.map(product => ({
+            value: product.name,
+            label: product.name
+          }));
+          
+          // Combine default types with Stripe products
+          setSessionTypes([
+            { value: 'Full', label: 'Full Session' },
+            { value: 'Half', label: 'Half Session' },
+            ...productTypes
+          ]);
+        }
+      } catch (error) {
+        console.error('[SessionLogForm] Error fetching products:', error);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchStripeProducts();
+  }, [companyProfile]);
 
   const form = useForm<SessionLogFormValues>({
     resolver: zodResolver(sessionLogSchema),
@@ -133,7 +185,7 @@ export function SessionLogForm({ coachId, coachName, companyId, clients, session
           sessionDate: new Date(`${data.sessionDate}T${data.sessionTime}`).toISOString(),
           sessionType: data.sessionType,
           videoLink: data.videoLink,
-          sessionNotes: data.sessionNotes,
+          notes: data.sessionNotes,
           summary: data.summary,
           // Client and company cannot be changed in edit mode, so we don't include it here
         };
@@ -244,16 +296,22 @@ export function SessionLogForm({ coachId, coachName, companyId, clients, session
               name="sessionType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Session Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!firebaseAvailable}>
+                  <FormLabel>
+                    Session Type
+                    {loadingProducts && <span className="text-sm text-muted-foreground ml-2">(Loading products...)</span>}
+                  </FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!firebaseAvailable || loadingProducts}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select session type" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Full">Full Session</SelectItem>
-                      <SelectItem value="Half">Half Session</SelectItem>
+                      {sessionTypes.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

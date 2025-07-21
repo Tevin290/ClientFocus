@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 
 'use client';
 
@@ -5,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, DollarSign, Eye, Video, FileText, Loader2, TriangleAlert, XCircle, Archive, RotateCcw, Building } from "lucide-react";
+import { CheckCircle, Clock, DollarSign, Video, FileText, Loader2, TriangleAlert, XCircle, Archive, RotateCcw, Building } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,

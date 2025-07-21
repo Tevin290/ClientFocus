@@ -1,16 +1,18 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Users, Activity, Briefcase, Loader2, TriangleAlert } from "lucide-react";
-import { BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar, ResponsiveContainer } from 'recharts';
+import { BarChart, Users, Activity, Briefcase, Loader2, TriangleAlert, Building } from "lucide-react";
+import { BarChart as RechartsBarChart, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { getAllCoaches, getAllSessions, type UserProfile, type Session } from '@/lib/firestoreService';
+import { getAllCoaches, getAllSessions, getAllCompanies, getAllUsers, type UserProfile, type Session, type CompanyProfile } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
+import { useOnboarding } from '@/context/onboarding-context';
 import { useToast } from '@/hooks/use-toast';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -33,13 +35,66 @@ const chartConfig = {
 
 
 export default function AdminDashboardPage() {
-  const { role, userProfile, isLoading: isRoleLoading } = useRole();
+  const { role, userProfile, companyProfile, isLoading: isRoleLoading } = useRole();
+  const { addSteps } = useOnboarding();
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [, setCompanies] = useState<Array<CompanyProfile>>([]);
+  const [, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCoachId, setSelectedCoachId] = useState<string>('all');
   const { toast } = useToast();
   const firebaseAvailable = isFirebaseConfigured();
+
+  // Setup onboarding tour steps
+  useEffect(() => {
+    const adminTourSteps = [
+      {
+        id: 'welcome',
+        target: 'body',
+        title: 'Welcome to your Admin Dashboard!',
+        content: 'This is where you manage your company\'s coaching operations. Let\'s take a quick tour to get you started.',
+        placement: 'bottom' as const,
+      },
+      {
+        id: 'company-info',
+        target: '[data-tour="company-info"]',
+        title: 'Company Information',
+        content: 'Here you can see your company details including name, slug, and public URL. Share your company URL with coaches and clients for easy signup.',
+        placement: 'bottom' as const,
+      },
+      {
+        id: 'metrics',
+        target: '[data-tour="metrics"]',
+        title: 'Key Metrics',
+        content: 'Monitor your company\'s performance with sessions this month, active coaches, and pending reviews. These cards give you a quick overview of your business.',
+        placement: 'bottom' as const,
+      },
+      {
+        id: 'chart',
+        target: '[data-tour="chart"]',
+        title: 'Session Analytics',
+        content: 'Track session trends over time and filter by specific coaches. Use this data to understand your business patterns and growth.',
+        placement: 'top' as const,
+      },
+      {
+        id: 'management-links',
+        target: '[data-tour="management-links"]',
+        title: 'Management Tools',
+        content: 'Access coach management, billing setup, and other administrative functions. These tools help you run your coaching business effectively.',
+        placement: 'top' as const,
+      },
+      {
+        id: 'sidebar',
+        target: '[data-sidebar]',
+        title: 'Navigation Sidebar',
+        content: 'Use the sidebar to navigate between different sections: Sessions, Coaches, Billing, and Settings. Everything you need is just a click away!',
+        placement: 'right' as const,
+      },
+    ];
+
+    addSteps('admin-dashboard', adminTourSteps);
+  }, [addSteps]);
 
   useEffect(() => {
     if (isRoleLoading || !firebaseAvailable || !userProfile?.companyId) {
@@ -47,19 +102,32 @@ export default function AdminDashboardPage() {
       return;
     }
 
-    const companyId = userProfile.companyId;
-
     if (role === 'admin' || role === 'super-admin') {
       const fetchData = async () => {
         setIsLoading(true);
         try {
-          // All data fetches are now scoped to the company
-          const [fetchedCoaches, fetchedSessions] = await Promise.all([
-            getAllCoaches(companyId),
-            getAllSessions(companyId)
-          ]);
-          setCoaches(fetchedCoaches);
-          setSessions(fetchedSessions);
+          if (role === 'super-admin') {
+            // Super-admin sees all data across companies
+            const [fetchedCoaches, fetchedSessions, fetchedCompanies, fetchedUsers] = await Promise.all([
+              getAllUsers().then(users => users.filter(u => u.role === 'coach')),
+              getAllSessions(''), // Empty string to get all sessions for super-admin
+              getAllCompanies(),
+              getAllUsers()
+            ]);
+            setCoaches(fetchedCoaches);
+            setSessions(fetchedSessions);
+            setCompanies(fetchedCompanies);
+            setUsers(fetchedUsers);
+          } else {
+            // Regular admin sees only their company data
+            const companyId = userProfile.companyId!;
+            const [fetchedCoaches, fetchedSessions] = await Promise.all([
+              getAllCoaches(companyId),
+              getAllSessions(companyId)
+            ]);
+            setCoaches(fetchedCoaches);
+            setSessions(fetchedSessions);
+          }
         } catch (error: any) {
           console.error("Failed to fetch admin dashboard data:", error);
           toast({ title: "Error", description: error.message || "Could not load dashboard data.", variant: "destructive" });
@@ -154,9 +222,48 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Admin Dashboard" description="Overview of platform activity and key metrics." />
+      <PageHeader 
+        title={role === 'super-admin' ? "Platform Admin Dashboard" : `${companyProfile?.name || 'Company'} Admin Dashboard`} 
+        description={role === 'super-admin' ? "Overview of platform activity and key metrics." : "Overview of company activity and key metrics."} 
+      />
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
+      {/* Company Info Card for Regular Admins */}
+      {role === 'admin' && companyProfile && (
+        <Card className="shadow-light mb-6" data-tour="company-info">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center">
+              <Building className="mr-2 h-6 w-6 text-primary" />
+              Company Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Company Name</p>
+                <p className="text-lg font-semibold">{companyProfile.name}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Company Slug</p>
+                <p className="text-lg font-semibold">{companyProfile.slug}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Company URL</p>
+                <p className="text-sm text-blue-600">
+                  <a href={`/${companyProfile.slug}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    {process.env.NEXT_PUBLIC_APP_URL}/{companyProfile.slug}
+                  </a>
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Admin Email</p>
+                <p className="text-sm">{companyProfile.adminEmail}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8" data-tour="metrics">
         <Card className="shadow-light">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium uppercase">Sessions This Month</CardTitle>
@@ -189,7 +296,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      <Card className="shadow-light">
+      <Card className="shadow-light" data-tour="chart">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
@@ -232,24 +339,69 @@ export default function AdminDashboardPage() {
       </Card>
 
       {/* Link to Coach Management Page */}
-      <Card className="mt-8 shadow-light">
-        <CardHeader>
-          <CardTitle className="font-headline flex items-center">
-            <Briefcase className="mr-2 h-6 w-6 text-primary" />
-            Coach Management
-          </CardTitle>
-          <CardDescription>
-            View all registered coaches, their assigned clients, and session statistics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/admin/coaches">
-              View All Coaches
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Management Links */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mt-8" data-tour="management-links">
+        <Card className="shadow-light">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center">
+              <Briefcase className="mr-2 h-6 w-6 text-primary" />
+              Coach Management
+            </CardTitle>
+            <CardDescription>
+              View all registered coaches, their assigned clients, and session statistics.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/admin/coaches">
+                View All Coaches
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {role === 'super-admin' && (
+          <>
+            <Card className="shadow-light">
+              <CardHeader>
+                <CardTitle className="font-headline flex items-center">
+                  <Building className="mr-2 h-6 w-6 text-primary" />
+                  Companies Management
+                </CardTitle>
+                <CardDescription>
+                  Create, edit, and manage all companies on the platform.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild>
+                  <Link href="/admin/companies">
+                    Manage Companies
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-light">
+              <CardHeader>
+                <CardTitle className="font-headline flex items-center">
+                  <Users className="mr-2 h-6 w-6 text-primary" />
+                  Users Management
+                </CardTitle>
+                <CardDescription>
+                  View and manage all users across all companies.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild>
+                  <Link href="/admin/users">
+                    Manage Users
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
     </div>
   );
 }

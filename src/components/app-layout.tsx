@@ -85,7 +85,6 @@ const AppLogo = () => (
 export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { role, userProfile, isLoading: isRoleLoading, logout } = useRole(); // Use userProfile for display
-  const router = useRouter(); 
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const { toast } = useToast();
 
@@ -165,14 +164,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  if (!role && pathname !== '/login' && !pathname.startsWith('/coach/log-session/success') && pathname !== '/signup') {
+  if (!role && pathname !== '/login' && pathname !== '/signup') {
     return null; // Let RoleContext handle the redirect
   }
 
 
   return (
-    <SidebarProvider defaultOpen collapsible="icon">
-      <Sidebar side="left" variant="sidebar" className="border-r shadow-light">
+    <SidebarProvider defaultOpen>
+      <Sidebar side="left" className="border-r shadow-light" data-sidebar>
         <SidebarHeader>
           <AppLogo />
         </SidebarHeader>

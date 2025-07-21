@@ -11,6 +11,7 @@ import { useRouter, usePathname } from 'next/navigation';
 export type UserRole = 'admin' | 'super-admin' | 'coach' | 'client' | null;
 
 interface AuthUser {
+  companyId: string;
   uid: string;
   email: string | null;
   displayName: string | null;
@@ -39,15 +40,15 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
 
   const fetchFullProfile = React.useCallback(async (firebaseUser: FirebaseUser) => {
-    setUser({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-    });
-
     try {
         const profile = await getUserProfile(firebaseUser.uid);
         if (profile) {
+            setUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                companyId: profile.companyId ?? '',
+            });
             setUserProfile(profile);
             setRoleState(profile.role);
             if (profile.companyId) {
@@ -68,7 +69,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         setCompanyProfile(null);
         setRoleState(null);
     }
-  }, []);
+  }, [setUser, setUserProfile, setCompanyProfile, setRoleState]);
 
   React.useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -97,11 +98,15 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    console.log('[RoleContext] Redirect check:', { user: !!user, role, pathname, isLoading });
+    
     const isAuthPage = pathname === '/login' || pathname === '/signup';
+    const isCompanyAuthPage = pathname.match(/^\/[a-z0-9-]+\/(login|signup)$/);
+    const isCompanyLandingPage = pathname.match(/^\/[a-z0-9-]+$/);
     const isStripeReturn = pathname.startsWith('/stripe/connect/return');
     
     if (user && role) {
-      if (isAuthPage) {
+      if (isAuthPage || isCompanyAuthPage) {
         let dashboardPath = `/${role}/dashboard`;
         if (role === 'super-admin') dashboardPath = '/admin/dashboard';
         
@@ -110,7 +115,10 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
       }
     } 
     else {
-      const isProtectedRoute = !isAuthPage && !pathname.startsWith('/coach/log-session/success') && !isStripeReturn;
+      const isPublicRoute = isAuthPage || isCompanyAuthPage || isCompanyLandingPage || 
+                           pathname === '/' || isStripeReturn;
+      const isProtectedRoute = !isPublicRoute;
+      
       if (isProtectedRoute) {
         console.log(`[RoleContext] User not authenticated, redirecting to /login from protected page.`);
         router.replace('/login');

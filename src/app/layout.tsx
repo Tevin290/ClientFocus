@@ -3,6 +3,8 @@ import { Poppins } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { RoleProvider } from '@/context/role-context';
+import { OnboardingProvider } from '@/context/onboarding-context';
+import { LoadingProvider } from '@/context/loading-context';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -30,8 +32,12 @@ export default function RootLayout({
       </head>
       <body className={`${poppins.variable} font-body antialiased`} suppressHydrationWarning={true}>
         <RoleProvider>
-          {children}
-          <Toaster />
+          <OnboardingProvider>
+            <LoadingProvider>
+              {children}
+              <Toaster />
+            </LoadingProvider>
+          </OnboardingProvider>
         </RoleProvider>
       </body>
     </html>

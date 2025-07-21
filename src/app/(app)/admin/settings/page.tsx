@@ -1,3 +1,5 @@
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 'use client';
 
@@ -22,6 +24,8 @@ import { migrateDataToCompany } from '@/lib/migrationService';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import StripeConnect from '@/components/admin/stripe-connect';
+import CreateCompany from '@/components/admin/create-company';
 
 import {
   AlertDialog,
@@ -223,6 +227,13 @@ export default function AdminSettingsPage() {
                 </p>
             </CardContent>
         </Card>
+
+        <CreateCompany />
+
+        <div className="grid gap-6">
+          <StripeConnect mode="test" />
+          {!isTestMode && <StripeConnect mode="live" />}
+        </div>
 
         <Card className="shadow-light">
           <CardHeader>
