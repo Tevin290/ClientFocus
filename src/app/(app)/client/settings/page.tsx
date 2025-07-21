@@ -11,7 +11,7 @@ import * as z from 'zod';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Save, TriangleAlert, Users, CreditCard, CheckCircle } from 'lucide-react';
+import { Loader2, Save, TriangleAlert, Users, CreditCard, CheckCircle, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getAllCoaches, updateUserProfile, type UserProfile } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
@@ -20,7 +20,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
-import { createCheckoutSetupSession } from '@/lib/stripeService';
+import { createCheckoutSetupSession, createCustomerPortalSession } from '@/lib/stripeService';
 import { getStripeMode } from '@/lib/stripeClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -38,6 +38,7 @@ export default function ClientSettingsPage() {
   
   const [isSaving, setIsSaving] = useState(false);
   const [isRedirectingToStripe, setIsRedirectingToStripe] = useState(false);
+  const [isRedirectingToPortal, setIsRedirectingToPortal] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
@@ -163,6 +164,30 @@ export default function ClientSettingsPage() {
     }
   }
 
+  const handleEditPaymentMethod = async () => {
+    if (!companyStripeAccountId || !clientStripeCustomerId) {
+        toast({ title: "Error", description: "Payment method information not available.", variant: "destructive" });
+        return;
+    }
+    setIsRedirectingToPortal(true);
+    try {
+        const { url, error } = await createCustomerPortalSession(
+          companyStripeAccountId,
+          clientStripeCustomerId,
+          stripeMode
+        );
+
+        if (error || !url) {
+            throw new Error(error || 'Failed to create customer portal session.');
+        }
+
+        window.location.href = url;
+    } catch (err: any) {
+        toast({ title: "Could not open payment portal", description: err.message, variant: "destructive"});
+        setIsRedirectingToPortal(false);
+    }
+  }
+
   if (isRoleLoading) {
      return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
@@ -198,14 +223,28 @@ export default function ClientSettingsPage() {
           </CardHeader>
           <CardContent>
             {clientStripeCustomerId ? (
-                 <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
-                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-                    <div>
-                        <p className="font-semibold text-green-800 dark:text-green-200">Payment Method on File</p>
-                        <p className="text-sm text-green-700 dark:text-green-300">
-                           Your account is ready for billing in {stripeMode} mode.
-                        </p>
+                <div className="space-y-4">
+                    <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                        <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                        <div>
+                            <p className="font-semibold text-green-800 dark:text-green-200">Payment Method on File</p>
+                            <p className="text-sm text-green-700 dark:text-green-300">
+                               Your account is ready for billing in {stripeMode} mode.
+                            </p>
+                        </div>
                     </div>
+                    <Button 
+                        onClick={handleEditPaymentMethod} 
+                        disabled={isRedirectingToPortal || !isCompanyOnboarded}
+                        variant="outline"
+                    >
+                        {isRedirectingToPortal ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Settings className="mr-2 h-4 w-4" />
+                        )}
+                        {isRedirectingToPortal ? 'Opening Portal...' : 'Edit Payment Method'}
+                    </Button>
                 </div>
             ) : (
                 <Button onClick={handleAddPaymentMethod} disabled={isRedirectingToStripe || !isCompanyOnboarded}>

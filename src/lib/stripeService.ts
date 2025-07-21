@@ -256,3 +256,29 @@ export async function getPrices(
     return { prices: null, error: error.message || 'Failed to fetch prices.' };
   }
 }
+
+/**
+ * Creates a Stripe customer portal session for managing payment methods
+ */
+export async function createCustomerPortalSession(
+  stripeAccountId: string,
+  stripeCustomerId: string,
+  mode: 'test' | 'live'
+): Promise<{ url: string | null; error?: string }> {
+  try {
+    const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/client/settings`,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    return { url: session.url };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error creating customer portal session:', error);
+    return { url: null, error: error.message || 'Failed to create customer portal session.' };
+  }
+}
