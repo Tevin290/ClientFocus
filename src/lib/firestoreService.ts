@@ -133,6 +133,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
       return null;
     }
     
+    // Handle offline/network errors gracefully
+    if (error.code === 'unavailable' || error.code === 'unknown' || error.message?.includes('offline')) {
+      console.warn(`[firestoreService] Network/offline error for user ${uid}. Will retry when connection is restored.`);
+      return null;
+    }
+    
     let detailedMessage = `Failed to fetch user profile for UID ${uid}.`;
     if (error.code) detailedMessage += ` Firebase Code: ${error.code}.`;
     if (error.message) detailedMessage += ` Original error: ${error.message}.`;

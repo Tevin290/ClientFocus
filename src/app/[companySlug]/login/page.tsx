@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Loader2 } from 'lucide-react';
@@ -20,7 +20,7 @@ export default function CompanyLoginPage() {
   const router = useRouter();
   const params = useParams();
   const { role, isLoading: roleLoading } = useRole();
-  const [error, setError] = useState<string>('');
+  const { toast } = useToast();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -37,13 +37,21 @@ export default function CompanyLoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSigningIn(true);
-    setError('');
 
     try {
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
       // Navigation will be handled by the role context
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      let errorMessage = 'Login failed. Please check your email and password or try again.';
+      if (err && typeof err === 'object' && 'code' in err) {
+        const firebaseError = err as { code: string };
+        if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
+          errorMessage = 'Invalid email or password.';
+        } else if (firebaseError.code === 'auth/invalid-email') {
+          errorMessage = 'The email address format is not valid.';
+        }
+      }
+      toast({ title: 'Login Failed', description: errorMessage, variant: 'destructive' });
     } finally {
       setIsSigningIn(false);
     }
@@ -104,11 +112,6 @@ export default function CompanyLoginPage() {
                 placeholder="Enter your password"
               />
             </div>
-            {error && (
-              <Alert>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
             <Button 
               type="submit" 
               className="w-full"

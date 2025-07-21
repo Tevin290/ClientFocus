@@ -11,6 +11,7 @@ import { getStripeMode } from '@/lib/stripeClient';
 import type { CompanyProfile } from '@/lib/firestoreService';
 import { updateCompanyProfile } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
+import { ModeMismatchHandler } from '@/components/stripe/mode-mismatch-handler';
 
 interface StripeConnectFormProps {
   companyProfile: CompanyProfile;
@@ -77,6 +78,20 @@ export function StripeConnectForm({ companyProfile }: StripeConnectFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Show mode mismatch warning if account is connected in wrong mode */}
+        <ModeMismatchHandler 
+          accountMode={
+            // Check if we have an account in the current mode
+            (stripeMode === 'test' && companyProfile.stripeAccountId_test) ? 'test' :
+            (stripeMode === 'live' && companyProfile.stripeAccountId_live) ? 'live' :
+            // If no account in current mode but have account in other mode, show that mode
+            companyProfile.stripeAccountId_test ? 'test' :
+            companyProfile.stripeAccountId_live ? 'live' : 
+            null
+          }
+          className="mb-4"
+        />
+        
         {isAccountOnboarded ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">

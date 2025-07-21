@@ -34,23 +34,61 @@ export async function POST(req: NextRequest) {
   }
 
   let event: Stripe.Event;
+  let isLiveMode: boolean;
+  
   try {
+    // Try to construct event with appropriate webhook secret
+    // In production, try live secret first; in development, try test secret first
+    const tryLiveFirst = process.env.NODE_ENV === 'production';
     let tempEvent;
-    try {
-        if (!webhookSecretTest) throw new Error("Test secret not available.");
-        tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretTest);
-    } catch (err) {
-        if (!webhookSecretLive) throw new Error("Live secret not available.");
+    
+    if (tryLiveFirst && webhookSecretLive) {
+      try {
         tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretLive);
+        isLiveMode = true;
+      } catch (err) {
+        if (webhookSecretTest) {
+          tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretTest);
+          isLiveMode = false;
+        } else {
+          throw err;
+        }
+      }
+    } else if (webhookSecretTest) {
+      try {
+        tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretTest);
+        isLiveMode = false;
+      } catch (err) {
+        if (webhookSecretLive) {
+          tempEvent = stripe.webhooks.constructEvent(body, sig, webhookSecretLive);
+          isLiveMode = true;
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      throw new Error("No webhook secrets available");
     }
+    
     event = tempEvent;
+    
+    // Verify the mode matches the event's livemode flag
+    if (isLiveMode !== event.livemode) {
+      console.warn(`[Webhook] Mode mismatch: webhook secret suggests ${isLiveMode ? 'live' : 'test'} but event.livemode is ${event.livemode}`);
+      // Use the event's livemode as the authoritative source
+      isLiveMode = event.livemode;
+    }
   } catch (err: any) {
     console.error(`❌ Webhook signature verification failed: ${err.message}`);
     return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
-
-  const isLiveMode = event.livemode;
   console.log(`[Webhook] Received ${isLiveMode ? 'LIVE' : 'TEST'} event: ${event.type}`);
+  
+  // Add webhook endpoint validation to prevent conflicts
+  const expectedMode = process.env.NODE_ENV === 'production' ? 'live' : 'test';
+  if (process.env.STRIPE_WEBHOOK_STRICT_MODE === 'true' && isLiveMode !== (expectedMode === 'live')) {
+    console.warn(`[Webhook] Mode mismatch: received ${isLiveMode ? 'live' : 'test'} event but environment expects ${expectedMode}`);
+  }
 
   if (relevantEvents.has(event.type)) {
     try {

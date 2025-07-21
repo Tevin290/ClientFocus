@@ -23,13 +23,19 @@ export async function createConnectOAuthLink(
 
     // Use different redirect URIs for test vs live modes
     const getRedirectUri = (mode: 'test' | 'live') => {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+      if (!baseUrl) {
+        throw new Error('NEXT_PUBLIC_APP_URL environment variable is required');
+      }
+      
       if (mode === 'live') {
-        // For live mode, use HTTPS and production URL
-        const productionUrl = process.env.NEXT_PUBLIC_APP_URL;
-        return `${productionUrl}/api/stripe/connect/callback`.replace('http://', 'https://');
+        // For live mode, ensure HTTPS
+        const url = new URL(baseUrl);
+        url.protocol = 'https:';
+        return `${url.origin}/api/stripe/connect/callback`;
       } else {
-        // For test mode, use the development URL (can be HTTP)
-        return `${process.env.NEXT_PUBLIC_APP_URL}/api/stripe/connect/callback`;
+        // For test mode, use the configured URL as-is
+        return `${baseUrl}/api/stripe/connect/callback`;
       }
     };
 

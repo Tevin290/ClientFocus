@@ -1,7 +1,7 @@
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getAuth, type Auth, setPersistence, browserLocalPersistence, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, type Firestore, enableNetwork, disableNetwork, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -44,6 +44,28 @@ if (isFirebaseConfigured()) {
       .catch((error) => {
         console.error("Firebase Auth: Error setting persistence to local.", error);
       });
+    
+    // Wait for auth state to initialize before using Firestore
+    let authInitialized = false;
+    onAuthStateChanged(auth, (user) => {
+      if (!authInitialized) {
+        authInitialized = true;
+        console.log('Firebase Auth initialized, user:', user?.uid || 'anonymous');
+      }
+    });
+    
+    // Handle network state changes for better offline experience
+    window.addEventListener('online', () => {
+      console.log('Network back online, enabling Firestore');
+      if (authInitialized) {
+        enableNetwork(db).catch(console.error);
+      }
+    });
+    
+    window.addEventListener('offline', () => {
+      console.log('Network offline, disabling Firestore');
+      disableNetwork(db).catch(console.error);
+    });
   }
 } else {
   // This warning will now appear in the server console during build if .env is missing,
