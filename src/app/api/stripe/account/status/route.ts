@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       accountId: accountId,
-      businessName: account.business_profile?.name || 'Not provided',
+      businessName: account.business_profile?.name || 'Business name not set',
       email: account.email,
       country: account.country,
       charges_enabled: account.charges_enabled,
