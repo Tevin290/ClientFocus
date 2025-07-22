@@ -308,13 +308,13 @@ export async function createCustomerPortalSession(
     const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
     // Ensure billing portal configuration exists
-    try {
-      await stripe.billingPortal.configurations.list({
-        limit: 1,
-      }, {
-        stripeAccount: stripeAccountId,
-      });
-    } catch (configError) {
+    const configurations = await stripe.billingPortal.configurations.list({
+      limit: 1,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    if (configurations.data.length === 0) {
       // Create default billing portal configuration if none exists
       await stripe.billingPortal.configurations.create({
         features: {
