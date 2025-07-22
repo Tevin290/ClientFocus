@@ -2,6 +2,12 @@
 'use server';
 
 import Stripe from 'stripe';
+
+// Helper function to serialize Stripe objects for client components
+function serializeStripeObject(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(JSON.stringify(obj));
+}
 import { getStripeSecretKey } from './stripe';
 
 /**
@@ -177,7 +183,7 @@ export async function createProduct(
       stripeAccount: stripeAccountId,
     });
 
-    return { product };
+    return { product: serializeStripeObject(product) };
   } catch (error: any) {
     console.error('[Stripe Service] Error creating product:', error);
     return { product: null, error: error.message || 'Failed to create product.' };
@@ -206,7 +212,7 @@ export async function createPrice(
       stripeAccount: stripeAccountId,
     });
 
-    return { price };
+    return { price: serializeStripeObject(price) };
   } catch (error: any) {
     console.error('[Stripe Service] Error creating price:', error);
     return { price: null, error: error.message || 'Failed to create price.' };
@@ -231,7 +237,7 @@ export async function getProducts(
       stripeAccount: stripeAccountId,
     });
 
-    return { products: products.data };
+    return { products: serializeStripeObject(products.data) };
   } catch (error: any) {
     console.error('[Stripe Service] Error fetching products:', error);
     return { products: null, error: error.message || 'Failed to fetch products.' };
@@ -256,10 +262,36 @@ export async function getPrices(
       stripeAccount: stripeAccountId,
     });
 
-    return { prices: prices.data };
+    return { prices: serializeStripeObject(prices.data) };
   } catch (error: any) {
     console.error('[Stripe Service] Error fetching prices:', error);
     return { prices: null, error: error.message || 'Failed to fetch prices.' };
+  }
+}
+
+/**
+ * Disconnects a Stripe account by clearing the account ID and onboarding status
+ */
+export async function disconnectStripeAccount(
+  companyId: string,
+  mode: 'test' | 'live'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { updateCompanyProfile } = await import('./firestoreService');
+    
+    const accountIdField = mode === 'test' ? 'stripeAccountId_test' : 'stripeAccountId_live';
+    const onboardedField = mode === 'test' ? 'stripeAccountOnboarded_test' : 'stripeAccountOnboarded_live';
+    
+    // Clear the Stripe account data for the specified mode
+    await updateCompanyProfile(companyId, {
+      [accountIdField]: null,
+      [onboardedField]: false,
+    });
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error disconnecting Stripe account:', error);
+    return { success: false, error: error.message || 'Failed to disconnect Stripe account.' };
   }
 }
 
