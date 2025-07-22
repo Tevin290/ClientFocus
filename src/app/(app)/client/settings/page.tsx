@@ -136,8 +136,28 @@ export default function ClientSettingsPage() {
 
   const companyStripeAccountId = stripeMode === 'test' ? companyProfile?.stripeAccountId_test : companyProfile?.stripeAccountId_live;
   const isCompanyOnboarded = stripeMode === 'test' ? companyProfile?.stripeAccountOnboarded_test : companyProfile?.stripeAccountOnboarded_live;
-  const clientStripeCustomerId = stripeMode === 'test' ? userProfile?.stripeCustomerId_test : userProfile?.stripeCustomerId_live;
+  
+  // Get the correct stripe customer ID based on mode, but ensure it's not empty/undefined
+  const clientStripeCustomerId = (() => {
+    const rawId = stripeMode === 'test' ? userProfile?.stripeCustomerId_test : userProfile?.stripeCustomerId_live;
+    return rawId && rawId.trim().length > 0 ? rawId : null;
+  })();
+  
   const clientStripeCustomerIdField = stripeMode === 'test' ? 'stripeCustomerId_test' : 'stripeCustomerId_live';
+  
+  // Debug logging (remove in production)
+  console.log('Client Settings Debug:', {
+    stripeMode,
+    userProfile: userProfile ? {
+      uid: userProfile.uid,
+      email: userProfile.email,
+      stripeCustomerId_test: userProfile.stripeCustomerId_test,
+      stripeCustomerId_live: userProfile.stripeCustomerId_live,
+    } : null,
+    clientStripeCustomerId,
+    isCompanyOnboarded,
+    companyStripeAccountId
+  });
 
   const handleAddPaymentMethod = async () => {
     if (!companyStripeAccountId || !user || !userProfile?.companyId) {

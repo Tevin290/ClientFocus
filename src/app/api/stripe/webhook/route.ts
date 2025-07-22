@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
-import { getDocs, query, collection, where } from 'firebase/firestore';
+import { getDocs, query, collection, where, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { updateCompanyProfile } from '@/lib/firestoreService';
 
@@ -20,6 +19,8 @@ const relevantEvents = new Set([
   'customer.subscription.deleted',
   'product.created',
   'price.created',
+  'payment_intent.succeeded',
+  'payment_intent.payment_failed',
 ]);
 
 export async function POST(req: NextRequest) {
@@ -128,6 +129,82 @@ export async function POST(req: NextRequest) {
           console.log(`[Webhook] Invoice payment succeeded for: ${invoice.id}`);
           // TODO: Future implementation: Find the corresponding session(s) in your database using a
           // description or metadata on the invoice, and update its status to 'Billed'.
+          break;
+        }
+
+        case 'payment_intent.succeeded': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          console.log(`[Webhook] Payment intent succeeded: ${paymentIntent.id}`);
+          
+          const sessionId = paymentIntent.metadata?.sessionId;
+          if (sessionId) {
+            try {
+              // Update session status and payment info
+              await updateDoc(doc(db, 'sessions', sessionId), {
+                status: 'Billed',
+                billedAt: Timestamp.now(),
+                paymentIntentId: paymentIntent.id,
+                amountCharged: paymentIntent.amount,
+                currency: paymentIntent.currency,
+                updatedAt: Timestamp.now(),
+                webhookProcessed: true,
+              });
+
+              // Create/update billing record
+              await addDoc(collection(db, 'billing_records'), {
+                sessionId: sessionId,
+                paymentIntentId: paymentIntent.id,
+                clientId: paymentIntent.metadata?.clientId,
+                clientName: paymentIntent.metadata?.clientName,
+                coachName: paymentIntent.metadata?.coachName,
+                companyId: paymentIntent.metadata?.companyId,
+                sessionType: paymentIntent.metadata?.sessionType,
+                amountCharged: paymentIntent.amount,
+                currency: paymentIntent.currency,
+                stripeMode: isLiveMode ? 'live' : 'test',
+                billedAt: Timestamp.now(),
+                status: 'succeeded',
+                webhookProcessed: true,
+              });
+
+              console.log(`[Webhook] Updated session ${sessionId} to Billed status`);
+            } catch (error) {
+              console.error(`[Webhook] Failed to update session ${sessionId}:`, error);
+            }
+          }
+          break;
+        }
+
+        case 'payment_intent.payment_failed': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          console.log(`[Webhook] Payment intent failed: ${paymentIntent.id}`);
+          
+          const sessionId = paymentIntent.metadata?.sessionId;
+          if (sessionId) {
+            try {
+              // Create billing record for failed payment
+              await addDoc(collection(db, 'billing_records'), {
+                sessionId: sessionId,
+                paymentIntentId: paymentIntent.id,
+                clientId: paymentIntent.metadata?.clientId,
+                clientName: paymentIntent.metadata?.clientName,
+                coachName: paymentIntent.metadata?.coachName,
+                companyId: paymentIntent.metadata?.companyId,
+                sessionType: paymentIntent.metadata?.sessionType,
+                amountCharged: paymentIntent.amount,
+                currency: paymentIntent.currency,
+                stripeMode: isLiveMode ? 'live' : 'test',
+                billedAt: Timestamp.now(),
+                status: 'failed',
+                error: paymentIntent.last_payment_error?.message || 'Payment failed',
+                webhookProcessed: true,
+              });
+
+              console.log(`[Webhook] Recorded failed payment for session ${sessionId}`);
+            } catch (error) {
+              console.error(`[Webhook] Failed to record failed payment for session ${sessionId}:`, error);
+            }
+          }
           break;
         }
           

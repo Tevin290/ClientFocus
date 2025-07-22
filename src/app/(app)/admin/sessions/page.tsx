@@ -33,6 +33,8 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from '@/components/ui/alert';
 import Link from 'next/link';
 import { getStripeMode } from '@/lib/stripeClient';
+import { chargeSessionToClient, formatCurrency } from '@/lib/billingService';
+import { BillingConfirmationDialog } from '@/components/billing/billing-confirmation-dialog';
 
 type SessionStatus = 'Under Review' | 'Approved' | 'Denied' | 'Billed';
 
@@ -44,6 +46,9 @@ export default function AdminSessionReviewPage() {
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
   const [showStripePrompt, setShowStripePrompt] = useState(false);
   const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
+  const [showBillingDialog, setShowBillingDialog] = useState(false);
+  const [sessionToBill, setSessionToBill] = useState<Session | null>(null);
+  const [isBillingInProgress, setIsBillingInProgress] = useState(false);
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
@@ -91,6 +96,16 @@ export default function AdminSessionReviewPage() {
       return;
     }
 
+    // Special handling for billing
+    if (newStatus === 'Billed') {
+      const session = sessions.find(s => s.id === sessionId);
+      if (session) {
+        setSessionToBill(session);
+        setShowBillingDialog(true);
+        return;
+      }
+    }
+
     try {
       await updateSession(sessionId, { status: newStatus });
       
@@ -112,6 +127,61 @@ export default function AdminSessionReviewPage() {
       console.error(`Error updating session ${sessionId} to ${newStatus}:`, error);
       toast({ title: "Update Failed", description: "Could not update session status.", variant: "destructive" });
     }
+  };
+
+  const handleBillingConfirm = async () => {
+    if (!sessionToBill || !userProfile?.companyId) return;
+
+    setIsBillingInProgress(true);
+
+    try {
+      const result = await chargeSessionToClient(
+        sessionToBill.id,
+        userProfile.companyId,
+        stripeMode
+      );
+
+      if (result.success) {
+        // Update local state
+        setSessions(prevSessions => 
+          prevSessions.map(s => 
+            s.id === sessionToBill.id ? { ...s, status: 'Billed' as SessionStatus } : s
+          )
+        );
+
+        const formattedAmount = result.amountCharged && result.currency 
+          ? formatCurrency(result.amountCharged, result.currency)
+          : 'Unknown amount';
+
+        toast({
+          title: 'Payment Successful',
+          description: `${sessionToBill.clientName} has been charged ${formattedAmount} for ${result.sessionType}.`,
+          variant: 'default',
+        });
+      } else {
+        toast({
+          title: 'Billing Failed',
+          description: result.error || 'Unable to process payment. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Billing error:', error);
+      toast({
+        title: 'Billing Error',
+        description: 'An unexpected error occurred while processing the payment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBillingInProgress(false);
+      setShowBillingDialog(false);
+      setSessionToBill(null);
+    }
+  };
+
+  const handleBillingCancel = () => {
+    setShowBillingDialog(false);
+    setSessionToBill(null);
   };
 
   const handleDismiss = async (sessionId: string) => {
@@ -316,6 +386,14 @@ export default function AdminSessionReviewPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <BillingConfirmationDialog
+        isOpen={showBillingDialog}
+        onClose={handleBillingCancel}
+        onConfirm={handleBillingConfirm}
+        session={sessionToBill}
+        isProcessing={isBillingInProgress}
+      />
 
     </div>
   );

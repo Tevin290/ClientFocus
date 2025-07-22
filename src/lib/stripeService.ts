@@ -307,16 +307,18 @@ export async function createCustomerPortalSession(
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
-    // Ensure billing portal configuration exists
-    const configurations = await stripe.billingPortal.configurations.list({
-      limit: 1,
+    // Ensure billing portal configuration exists and is properly configured
+    let configurations = await stripe.billingPortal.configurations.list({
+      limit: 10,
     }, {
       stripeAccount: stripeAccountId,
     });
 
-    if (configurations.data.length === 0) {
+    let activeConfig = configurations.data.find(config => config.is_default);
+
+    if (!activeConfig && configurations.data.length === 0) {
       // Create default billing portal configuration if none exists
-      await stripe.billingPortal.configurations.create({
+      activeConfig = await stripe.billingPortal.configurations.create({
         features: {
           customer_update: {
             allowed_updates: ['email', 'tax_id'],
@@ -325,13 +327,7 @@ export async function createCustomerPortalSession(
           invoice_history: { enabled: true },
           payment_method_update: { enabled: true },
           subscription_cancel: { 
-            enabled: true,
-            mode: 'at_period_end',
-          },
-          subscription_update: {
-            enabled: true,
-            default_allowed_updates: ['price'],
-            products: [],
+            enabled: false,
           },
         },
         business_profile: {
@@ -341,6 +337,39 @@ export async function createCustomerPortalSession(
       }, {
         stripeAccount: stripeAccountId,
       });
+    } else if (!activeConfig) {
+      // Use the first configuration if no default is found
+      activeConfig = configurations.data[0];
+    }
+
+    // If the existing configuration has subscription features that might cause issues,
+    // create a new simplified configuration
+    if (activeConfig.features.subscription_update?.enabled) {
+      try {
+        await stripe.billingPortal.configurations.create({
+          features: {
+            customer_update: {
+              allowed_updates: ['email', 'tax_id'],
+              enabled: true,
+            },
+            invoice_history: { enabled: true },
+            payment_method_update: { enabled: true },
+            subscription_cancel: { 
+              enabled: false,
+            },
+          },
+          business_profile: {
+            privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL}/privacy`,
+            terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL}/terms`,
+          },
+          is_default: true,
+        }, {
+          stripeAccount: stripeAccountId,
+        });
+      } catch (configError: any) {
+        console.warn('[Stripe Service] Could not create new configuration:', configError.message);
+        // Continue with existing configuration
+      }
     }
 
     const session = await stripe.billingPortal.sessions.create({

@@ -2,21 +2,27 @@
 'use client';
 
 import { PageHeader } from "@/components/shared/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, Loader2, TriangleAlert } from "lucide-react";
 import { useRole } from "@/context/role-context";
 import { StripeConnectForm } from "@/components/forms/stripe-connect-form";
 import { StripeProductsManagement } from "@/components/admin/stripe-products-management";
 import { Alert, AlertDescription, AlertTitle as UiAlertTitle } from "@/components/ui/alert";
 import { useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { BillingDashboard } from "@/components/billing/billing-dashboard";
+import { getStripeMode } from "@/lib/stripeClient";
 
 
 export default function AdminBillingPage() {
   const { companyProfile, isLoading, role, refetchCompanyProfile } = useRole();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
+
+  useEffect(() => {
+    setStripeMode(getStripeMode());
+  }, []);
 
   useEffect(() => {
     const success = searchParams.get('success');
@@ -86,6 +92,25 @@ export default function AdminBillingPage() {
       <div className="mt-8">
         <StripeProductsManagement companyProfile={companyProfile} />
       </div>
+
+      {/* Only show billing dashboard to super-admins and if company is onboarded */}
+      {role === 'super-admin' && companyProfile?.id && (
+        (stripeMode === 'test' && companyProfile?.stripeAccountOnboarded_test) ||
+        (stripeMode === 'live' && companyProfile?.stripeAccountOnboarded_live)
+      ) && (
+        <div className="mt-8">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Billing Dashboard
+            </h2>
+            <p className="text-muted-foreground">
+              Track billing activity and revenue for your company in {stripeMode} mode.
+            </p>
+          </div>
+          <BillingDashboard companyId={companyProfile.id} stripeMode={stripeMode} />
+        </div>
+      )}
     </div>
   );
 }
