@@ -307,6 +307,42 @@ export async function createCustomerPortalSession(
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
+    // Ensure billing portal configuration exists
+    try {
+      await stripe.billingPortal.configurations.list({
+        limit: 1,
+      }, {
+        stripeAccount: stripeAccountId,
+      });
+    } catch (configError) {
+      // Create default billing portal configuration if none exists
+      await stripe.billingPortal.configurations.create({
+        features: {
+          customer_update: {
+            allowed_updates: ['email', 'tax_id'],
+            enabled: true,
+          },
+          invoice_history: { enabled: true },
+          payment_method_update: { enabled: true },
+          subscription_cancel: { 
+            enabled: true,
+            mode: 'at_period_end',
+          },
+          subscription_update: {
+            enabled: true,
+            default_allowed_updates: ['price'],
+            products: [],
+          },
+        },
+        business_profile: {
+          privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL}/privacy`,
+          terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL}/terms`,
+        },
+      }, {
+        stripeAccount: stripeAccountId,
+      });
+    }
+
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
       return_url: `${process.env.NEXT_PUBLIC_APP_URL}/client/settings`,
