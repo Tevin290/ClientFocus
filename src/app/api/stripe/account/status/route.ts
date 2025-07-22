@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
         eventually_due: account.requirements?.eventually_due || [],
         disabled_reason: account.requirements?.disabled_reason,
       },
-      created: new Date(account.created * 1000).toISOString(),
+      created: account.created ? new Date(account.created * 1000).toISOString() : null,
       type: account.type,
       // Legacy fields for backward compatibility
       chargesEnabled: account.charges_enabled,
