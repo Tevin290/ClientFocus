@@ -171,7 +171,7 @@ export default function ClientSettingsPage() {
           companyStripeAccountId, 
           user.uid, 
           user.email!,
-          clientStripeCustomerId,
+          clientStripeCustomerId || undefined,
           stripeMode
         );
 
@@ -199,7 +199,7 @@ export default function ClientSettingsPage() {
     try {
         const { url, error } = await createCustomerPortalSession(
           companyStripeAccountId,
-          clientStripeCustomerId,
+          clientStripeCustomerId!, // Non-null assertion since we check above
           stripeMode
         );
 
