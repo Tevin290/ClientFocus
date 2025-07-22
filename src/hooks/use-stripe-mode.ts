@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getStripeModeFromServer, setStripeMode as setStripeModeAPI, getStripeMode } from '@/lib/stripeClient';
 import { isFirebaseConfigured } from '@/lib/firebase';
 
@@ -8,6 +8,7 @@ export function useStripeMode() {
   const [stripeMode, setStripeModeState] = useState<'test' | 'live'>(getStripeMode());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const stripeModeRef = useRef(stripeMode);
 
   // Fetch initial mode from server
   useEffect(() => {
@@ -19,6 +20,7 @@ export function useStripeMode() {
         const serverMode = await getStripeModeFromServer();
         if (mounted) {
           setStripeModeState(serverMode);
+          stripeModeRef.current = serverMode;
           setError(null);
         }
       } catch (err: any) {
@@ -50,6 +52,11 @@ export function useStripeMode() {
     };
   }, []);
 
+  // Update ref whenever stripeMode changes
+  useEffect(() => {
+    stripeModeRef.current = stripeMode;
+  }, [stripeMode]);
+
   // Polling approach to check for mode changes (disabled real-time listener due to Firebase issues)
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -60,9 +67,10 @@ export function useStripeMode() {
     const pollInterval = setInterval(async () => {
       try {
         const serverMode = await getStripeModeFromServer();
-        if (serverMode !== stripeMode) {
-          console.log(`[useStripeMode] Polling update: ${stripeMode} → ${serverMode}`);
+        if (serverMode !== stripeModeRef.current) {
+          console.log(`[useStripeMode] Polling update: ${stripeModeRef.current} → ${serverMode}`);
           setStripeModeState(serverMode);
+          stripeModeRef.current = serverMode;
           
           // Update localStorage for immediate access
           if (typeof window !== 'undefined') {
@@ -80,7 +88,7 @@ export function useStripeMode() {
     }, 30000); // Poll every 30 seconds
 
     return () => clearInterval(pollInterval);
-  }, [stripeMode]);
+  }, []); // Empty dependency array - only set up once
 
   // Function to update stripe mode
   const updateStripeMode = useCallback(async (newMode: 'test' | 'live', userUid: string) => {
