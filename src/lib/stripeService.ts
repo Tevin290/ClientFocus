@@ -135,11 +135,19 @@ export async function createCheckoutSetupSession(
       try {
         const account = await stripe.accounts.retrieve(stripeAccountId);
         
-        // Only block if the account is completely broken
+        // Check for account issues
         if (account.requirements?.disabled_reason) {
           return { 
             url: null, 
-            error: `Account disabled: ${account.requirements.disabled_reason}. Please contact support.` 
+            error: `Stripe account needs attention: ${account.requirements.disabled_reason}. Please complete the required information in your Stripe Dashboard or re-run Connect onboarding.` 
+          };
+        }
+
+        // Check for past due requirements
+        if (account.requirements?.past_due && account.requirements.past_due.length > 0) {
+          return { 
+            url: null, 
+            error: `Stripe account has past due requirements: ${account.requirements.past_due.join(', ')}. Please complete these in your Stripe Dashboard or re-run Connect onboarding.` 
           };
         }
 
