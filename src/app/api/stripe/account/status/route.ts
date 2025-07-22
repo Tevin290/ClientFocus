@@ -18,9 +18,25 @@ export async function GET(request: NextRequest) {
     const account = await stripe.accounts.retrieve(accountId);
 
     return NextResponse.json({
+      accountId: accountId,
+      businessName: account.business_profile?.name || account.display_name,
+      email: account.email,
+      country: account.country,
+      charges_enabled: account.charges_enabled,
+      payouts_enabled: account.payouts_enabled,
+      details_submitted: account.details_submitted,
+      requirements: {
+        currently_due: account.requirements?.currently_due || [],
+        past_due: account.requirements?.past_due || [],
+        eventually_due: account.requirements?.eventually_due || [],
+        disabled_reason: account.requirements?.disabled_reason,
+      },
+      created: new Date(account.created * 1000).toISOString(),
+      type: account.type,
+      // Legacy fields for backward compatibility
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
-      detailsSubmitted: account.details_submitted
+      detailsSubmitted: account.details_submitted,
     });
 
   } catch (error: any) {

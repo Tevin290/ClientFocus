@@ -11,6 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { BillingDashboard } from "@/components/billing/billing-dashboard";
+import { StripeAccountInfo } from "@/components/admin/stripe-account-info";
 import { getStripeMode } from "@/lib/stripeClient";
 
 
@@ -88,6 +89,13 @@ export default function AdminBillingPage() {
       <div className="mt-8">
         <StripeConnectForm companyProfile={companyProfile} />
       </div>
+
+      {/* Show Stripe Account Details for Super Admins */}
+      {role === 'super-admin' && companyProfile && (
+        <div className="mt-8">
+          <StripeAccountInfo companyProfile={companyProfile} stripeMode={stripeMode} />
+        </div>
+      )}
       
       <div className="mt-8">
         <StripeProductsManagement companyProfile={companyProfile} />
