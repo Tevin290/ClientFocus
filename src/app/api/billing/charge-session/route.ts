@@ -97,9 +97,60 @@ export async function POST(request: NextRequest) {
 
     if (!stripeAccountId || !isOnboarded) {
       return NextResponse.json(
-        { error: 'Company Stripe account not properly configured' },
+        { error: `Company Stripe account not properly configured for ${stripeMode} mode` },
         { status: 400 }
       );
+    }
+
+    // Additional validation for live mode
+    if (stripeMode === 'live') {
+      try {
+        const secretKey = getStripeSecretKey(stripeMode);
+        const stripe = new Stripe(secretKey, { 
+          apiVersion: '2025-06-30.basil', 
+          typescript: true 
+        });
+
+        // Verify the account is actually capable of live charges
+        const account = await stripe.accounts.retrieve(stripeAccountId);
+        
+        if (!account.charges_enabled) {
+          return NextResponse.json(
+            { 
+              error: 'Live charges not enabled for this account',
+              details: 'The company needs to complete Stripe onboarding for live mode'
+            },
+            { status: 400 }
+          );
+        }
+
+        if (!account.details_submitted) {
+          return NextResponse.json(
+            { 
+              error: 'Account details not submitted',
+              details: 'The company needs to complete all required information in Stripe'
+            },
+            { status: 400 }
+          );
+        }
+
+        console.log(`[Billing API] Account verification for live mode:`, {
+          accountId: stripeAccountId,
+          charges_enabled: account.charges_enabled,
+          details_submitted: account.details_submitted,
+          payouts_enabled: account.payouts_enabled,
+        });
+
+      } catch (accountError: any) {
+        console.error('[Billing API] Error verifying account capabilities:', accountError);
+        return NextResponse.json(
+          { 
+            error: 'Unable to verify account status',
+            details: accountError.message
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Get client profile

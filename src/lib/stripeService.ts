@@ -129,6 +129,32 @@ export async function createCheckoutSetupSession(
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
+    // Validate account capabilities for live mode
+    if (mode === 'live') {
+      try {
+        const account = await stripe.accounts.retrieve(stripeAccountId);
+        
+        if (!account.charges_enabled) {
+          return { 
+            url: null, 
+            error: 'Live payments not enabled. The company needs to complete Stripe onboarding for live mode.' 
+          };
+        }
+
+        if (!account.details_submitted) {
+          return { 
+            url: null, 
+            error: 'Account setup incomplete. The company needs to complete all required information in Stripe.' 
+          };
+        }
+      } catch (accountError: any) {
+        return { 
+          url: null, 
+          error: `Unable to verify account status: ${accountError.message}` 
+        };
+      }
+    }
+
     let stripeCustomerId = existingStripeCustomerId;
     let newStripeCustomerId: string | undefined = undefined;
 
