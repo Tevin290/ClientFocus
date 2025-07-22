@@ -21,7 +21,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
 import { createCheckoutSetupSession, createCustomerPortalSession } from '@/lib/stripeService';
-import { getStripeMode } from '@/lib/stripeClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const selectCoachSchema = z.object({
@@ -42,11 +41,18 @@ export default function ClientSettingsPage() {
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
-  const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
+  const [localStripeMode, setLocalStripeMode] = useState<'test' | 'live'>('test');
+  
+  // Use local mode instead of the server hook to avoid permission errors for clients
+  const stripeMode = localStripeMode;
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
-    setStripeMode(getStripeMode());
+    
+    // Initialize local stripe mode from localStorage
+    import('@/lib/stripeClient').then(({ getStripeMode }) => {
+      setLocalStripeMode(getStripeMode());
+    });
 
     if (searchParams.get('payment_setup_success')) {
         toast({

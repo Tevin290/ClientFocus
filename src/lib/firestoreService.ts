@@ -721,3 +721,61 @@ export async function createCompany(companyData: {
     return { success: false, error: error.message || 'Failed to create company' };
   }
 }
+
+// Global Settings interface for platform-wide configurations
+export interface GlobalSettings {
+  stripeMode: 'test' | 'live';
+  updatedAt: Timestamp;
+  updatedBy: string; // UID of the user who made the change
+}
+
+// Get global platform settings
+export async function getGlobalSettings(): Promise<GlobalSettings | null> {
+  ensureFirebaseIsOperational();
+  try {
+    const settingsDocRef = doc(db, 'settings', 'global');
+    const settingsSnap = await getDoc(settingsDocRef);
+    
+    if (settingsSnap.exists()) {
+      const data = settingsSnap.data();
+      return {
+        stripeMode: data.stripeMode || 'test',
+        updatedAt: data.updatedAt || Timestamp.now(),
+        updatedBy: data.updatedBy || '',
+      } as GlobalSettings;
+    }
+    
+    // Return default settings if document doesn't exist
+    return {
+      stripeMode: process.env.NODE_ENV === 'production' ? 'live' : 'test',
+      updatedAt: Timestamp.now(),
+      updatedBy: '',
+    };
+  } catch (error: any) {
+    console.error(`[firestoreService] Error fetching global settings:`, error);
+    throw new Error(`Failed to fetch global settings: ${error.message}`);
+  }
+}
+
+// Update global platform settings (restricted to super-admins)
+export async function updateGlobalSettings(
+  updates: Partial<Omit<GlobalSettings, 'updatedAt'>>, 
+  updatedByUid: string
+): Promise<void> {
+  ensureFirebaseIsOperational();
+  try {
+    const settingsDocRef = doc(db, 'settings', 'global');
+    const updateData = {
+      ...updates,
+      updatedAt: serverTimestamp(),
+      updatedBy: updatedByUid,
+    };
+    
+    // Use setDoc with merge to create the document if it doesn't exist
+    await setDoc(settingsDocRef, updateData, { merge: true });
+    console.log(`[firestoreService] Updated global settings to ${updates.stripeMode || 'unknown'}`);
+  } catch (error: any) {
+    console.error(`[firestoreService] Error updating global settings:`, error);
+    throw new Error(`Failed to update global settings: ${error.code} ${error.message}`);
+  }
+}
