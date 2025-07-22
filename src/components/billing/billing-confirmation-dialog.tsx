@@ -15,10 +15,10 @@ import { Loader2, DollarSign } from 'lucide-react';
 
 interface Session {
   id: string;
-  clientName: string;
-  clientEmail: string;
+  clientName?: string;
+  clientEmail?: string;
   sessionType: string;
-  coachName: string;
+  coachName?: string;
   sessionDate: any;
 }
 
@@ -62,12 +62,14 @@ export function BillingConfirmationDialog({
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="font-medium text-muted-foreground">Client:</span>
-              <p className="font-medium">{session.clientName}</p>
-              <p className="text-xs text-muted-foreground">{session.clientEmail}</p>
+              <p className="font-medium">{session.clientName || 'Unknown Client'}</p>
+              {session.clientEmail && (
+                <p className="text-xs text-muted-foreground">{session.clientEmail}</p>
+              )}
             </div>
             <div>
               <span className="font-medium text-muted-foreground">Coach:</span>
-              <p className="font-medium">{session.coachName}</p>
+              <p className="font-medium">{session.coachName || 'Unknown Coach'}</p>
             </div>
             <div>
               <span className="font-medium text-muted-foreground">Session Type:</span>
