@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Additional validation for live mode
+    // For live mode billing, do basic validation but let Stripe handle the details
     if (stripeMode === 'live') {
       try {
         const secretKey = getStripeSecretKey(stripeMode);
@@ -111,45 +111,32 @@ export async function POST(request: NextRequest) {
           typescript: true 
         });
 
-        // Verify the account is actually capable of live charges
+        // Just verify the account exists and isn't disabled
         const account = await stripe.accounts.retrieve(stripeAccountId);
         
-        if (!account.charges_enabled) {
+        if (account.requirements?.disabled_reason) {
           return NextResponse.json(
             { 
-              error: 'Live charges not enabled for this account',
-              details: 'The company needs to complete Stripe onboarding for live mode'
+              error: 'Account is disabled',
+              details: account.requirements.disabled_reason
             },
             { status: 400 }
           );
         }
 
-        if (!account.details_submitted) {
-          return NextResponse.json(
-            { 
-              error: 'Account details not submitted',
-              details: 'The company needs to complete all required information in Stripe'
-            },
-            { status: 400 }
-          );
-        }
-
-        console.log(`[Billing API] Account verification for live mode:`, {
-          accountId: stripeAccountId,
-          charges_enabled: account.charges_enabled,
-          details_submitted: account.details_submitted,
-          payouts_enabled: account.payouts_enabled,
-        });
-
+        // Let Stripe handle other validations during payment processing
+        
       } catch (accountError: any) {
-        console.error('[Billing API] Error verifying account capabilities:', accountError);
-        return NextResponse.json(
-          { 
-            error: 'Unable to verify account status',
-            details: accountError.message
-          },
-          { status: 400 }
-        );
+        if (accountError.code === 'account_invalid') {
+          return NextResponse.json(
+            { 
+              error: 'Invalid Stripe account',
+              details: 'Please reconnect your Stripe account'
+            },
+            { status: 400 }
+          );
+        }
+        // For other errors, continue and let payment processing handle it
       }
     }
 

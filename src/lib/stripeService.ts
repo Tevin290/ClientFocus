@@ -129,29 +129,32 @@ export async function createCheckoutSetupSession(
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
-    // Validate account capabilities for live mode
+    // For live mode, we'll let Stripe handle the validation during checkout
+    // This allows the normal onboarding flow to work properly
     if (mode === 'live') {
       try {
         const account = await stripe.accounts.retrieve(stripeAccountId);
         
-        if (!account.charges_enabled) {
+        // Only block if the account is completely broken
+        if (account.requirements?.disabled_reason) {
           return { 
             url: null, 
-            error: 'Live payments not enabled. The company needs to complete Stripe onboarding for live mode.' 
+            error: `Account disabled: ${account.requirements.disabled_reason}. Please contact support.` 
           };
         }
 
-        if (!account.details_submitted) {
+        // Let Stripe handle other validation during checkout
+        // This allows for a smoother user experience
+        
+      } catch (accountError: any) {
+        // Only fail if we can't reach the account at all
+        if (accountError.code === 'account_invalid') {
           return { 
             url: null, 
-            error: 'Account setup incomplete. The company needs to complete all required information in Stripe.' 
+            error: 'Invalid Stripe account. Please reconnect your Stripe account.' 
           };
         }
-      } catch (accountError: any) {
-        return { 
-          url: null, 
-          error: `Unable to verify account status: ${accountError.message}` 
-        };
+        // For other errors, continue and let Stripe checkout handle it
       }
     }
 
