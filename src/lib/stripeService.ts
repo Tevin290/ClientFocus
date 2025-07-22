@@ -346,7 +346,7 @@ export async function createCustomerPortalSession(
     // create a new simplified configuration
     if (activeConfig.features.subscription_update?.enabled) {
       try {
-        await stripe.billingPortal.configurations.create({
+        const newConfig = await stripe.billingPortal.configurations.create({
           features: {
             customer_update: {
               allowed_updates: ['email', 'tax_id'],
@@ -362,10 +362,16 @@ export async function createCustomerPortalSession(
             privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL}/privacy`,
             terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL}/terms`,
           },
-          is_default: true,
         }, {
           stripeAccount: stripeAccountId,
         });
+        
+        // Set the new configuration as default if needed
+        if (!configurations.data.find(config => config.is_default)) {
+          // There's no API to set a configuration as default after creation
+          // The first configuration created automatically becomes the default
+          console.log('[Stripe Service] Created new billing portal configuration:', newConfig.id);
+        }
       } catch (configError: any) {
         console.warn('[Stripe Service] Could not create new configuration:', configError.message);
         // Continue with existing configuration
