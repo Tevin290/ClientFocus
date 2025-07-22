@@ -19,6 +19,13 @@ export const isFirebaseConfigured = () => {
   return !!firebaseConfig.apiKey && !!firebaseConfig.projectId;
 };
 
+export const initializeFirebase = () => {
+  if (!isFirebaseConfigured()) {
+    return null;
+  }
+  return getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+};
+
 // Declare the variables. They will be initialized conditionally.
 // Assigning them `null as any` is a way to satisfy TypeScript's strict initialization
 // while ensuring the consuming code, which uses `isFirebaseConfigured` as a guard, works correctly.
