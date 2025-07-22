@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User profile not found. Please ensure you are logged in.' }, { status: 404 });
     }
 
-    if (!['admin', 'super-admin'].includes(userProfile.role)) {
+    if (!userProfile.role || !['admin', 'super-admin'].includes(userProfile.role)) {
       return NextResponse.json({ 
-        error: `Unauthorized. Current role: ${userProfile.role}. Admin or super-admin access required.` 
+        error: `Unauthorized. Current role: ${userProfile.role || 'none'}. Admin or super-admin access required.` 
       }, { status: 403 });
     }
 
