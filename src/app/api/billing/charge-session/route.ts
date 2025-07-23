@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify customer has a default payment method
+    let defaultPaymentMethodId: string | null = null;
+    
     try {
       const customer = await stripe.customers.retrieve(stripeCustomerId, {
         expand: ['default_source', 'invoice_settings.default_payment_method'],
@@ -168,15 +170,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const hasPaymentMethod = customer.invoice_settings?.default_payment_method || 
-                              customer.default_source;
+      const defaultPaymentMethod = customer.invoice_settings?.default_payment_method || 
+                                   customer.default_source;
 
-      if (!hasPaymentMethod) {
+      if (!defaultPaymentMethod) {
         return NextResponse.json(
           { error: 'Client must add a payment method before billing can be processed' },
           { status: 400 }
         );
       }
+
+      // Extract the payment method ID
+      defaultPaymentMethodId = typeof defaultPaymentMethod === 'string' 
+        ? defaultPaymentMethod 
+        : defaultPaymentMethod.id;
+        
     } catch (customerError: any) {
       console.error('[Billing API] Customer verification failed:', customerError);
       return NextResponse.json(
@@ -227,15 +235,11 @@ export async function POST(request: NextRequest) {
     // Create payment intent
     let paymentIntent;
     try {
-      paymentIntent = await stripe.paymentIntents.create({
+      const paymentIntentParams: any = {
         amount: price.unit_amount!,
         currency: price.currency,
         customer: stripeCustomerId,
         confirm: true,
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: 'never',
-        },
         metadata: {
           sessionId: sessionId,
           sessionType: sessionData.sessionType,
@@ -245,7 +249,19 @@ export async function POST(request: NextRequest) {
           companyId: companyId,
         },
         description: `${sessionData.sessionType} session with ${sessionData.coachName} for ${sessionData.clientName}`,
-      }, {
+      };
+
+      // Add payment method or automatic payment methods
+      if (defaultPaymentMethodId) {
+        paymentIntentParams.payment_method = defaultPaymentMethodId;
+      } else {
+        paymentIntentParams.automatic_payment_methods = {
+          enabled: true,
+          allow_redirects: 'never',
+        };
+      }
+
+      paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, {
         stripeAccount: stripeAccountId,
       });
     } catch (paymentError: any) {
