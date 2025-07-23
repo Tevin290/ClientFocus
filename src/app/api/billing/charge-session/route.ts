@@ -102,15 +102,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Initialize Stripe
+    const secretKey = getStripeSecretKey(stripeMode);
+    const stripe = new Stripe(secretKey, { 
+      apiVersion: '2025-06-30.basil', 
+      typescript: true 
+    });
+
     // For live mode billing, do basic validation but let Stripe handle the details
     if (stripeMode === 'live') {
       try {
-        const secretKey = getStripeSecretKey(stripeMode);
-        const stripe = new Stripe(secretKey, { 
-          apiVersion: '2025-06-30.basil', 
-          typescript: true 
-        });
-
         // Just verify the account exists and isn't disabled
         const account = await stripe.accounts.retrieve(stripeAccountId);
         
@@ -195,13 +196,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Initialize Stripe
-    const secretKey = getStripeSecretKey(stripeMode);
-    const stripe = new Stripe(secretKey, { 
-      apiVersion: '2025-06-30.basil', 
-      typescript: true 
-    });
 
     // Get session type pricing from Stripe products
     const products = await stripe.products.list({
