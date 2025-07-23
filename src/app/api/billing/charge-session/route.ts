@@ -231,7 +231,6 @@ export async function POST(request: NextRequest) {
         amount: price.unit_amount!,
         currency: price.currency,
         customer: stripeCustomerId,
-        payment_method_types: ['card'],
         confirm: true,
         automatic_payment_methods: {
           enabled: true,
