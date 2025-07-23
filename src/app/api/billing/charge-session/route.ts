@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Stripe } from 'stripe';
-import { getFirestore, doc, getDoc, updateDoc, collection, addDoc, Timestamp } from 'firebase/firestore';
 import { getStripeSecretKey } from '@/lib/stripe';
-import { initializeFirebase } from '@/lib/firebase';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 interface BillingRequest {
   sessionId: string;
@@ -47,20 +46,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Firebase
-    const firebaseApp = initializeFirebase();
-    if (!firebaseApp) {
-      return NextResponse.json(
-        { error: 'Firebase not configured' },
-        { status: 500 }
-      );
-    }
-
-    const db = getFirestore(firebaseApp);
+    // Initialize Firebase Admin SDK
+    const db = getAdminDb();
 
     // Get session data
-    const sessionDoc = await getDoc(doc(db, 'sessions', sessionId));
-    if (!sessionDoc.exists()) {
+    const sessionDoc = await db.collection('sessions').doc(sessionId).get();
+    if (!sessionDoc.exists) {
       return NextResponse.json(
         { error: 'Session not found' },
         { status: 404 }
@@ -78,8 +69,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get company profile
-    const companyDoc = await getDoc(doc(db, 'companies', companyId));
-    if (!companyDoc.exists()) {
+    const companyDoc = await db.collection('companies').doc(companyId).get();
+    if (!companyDoc.exists) {
       return NextResponse.json(
         { error: 'Company not found' },
         { status: 404 }
@@ -142,8 +133,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get client profile
-    const clientDoc = await getDoc(doc(db, 'users', sessionData.clientId));
-    if (!clientDoc.exists()) {
+    const clientDoc = await db.collection('users').doc(sessionData.clientId).get();
+    if (!clientDoc.exists) {
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
@@ -281,17 +272,17 @@ export async function POST(request: NextRequest) {
     // Check payment status
     if (paymentIntent.status === 'succeeded') {
       // Update session status to billed
-      await updateDoc(doc(db, 'sessions', sessionId), {
+      await db.collection('sessions').doc(sessionId).update({
         status: 'Billed',
-        billedAt: Timestamp.now(),
+        billedAt: new Date(),
         paymentIntentId: paymentIntent.id,
         amountCharged: price.unit_amount,
         currency: price.currency,
-        updatedAt: Timestamp.now(),
+        updatedAt: new Date(),
       });
 
       // Create billing record for audit trail
-      await addDoc(collection(db, 'billing_records'), {
+      await db.collection('billing_records').add({
         sessionId: sessionId,
         paymentIntentId: paymentIntent.id,
         clientId: sessionData.clientId,
@@ -304,7 +295,7 @@ export async function POST(request: NextRequest) {
         currency: price.currency,
         stripeMode: stripeMode,
         stripeAccountId: stripeAccountId,
-        billedAt: Timestamp.now(),
+        billedAt: new Date(),
         status: 'succeeded',
         metadata: {
           sessionDate: sessionData.sessionDate,
@@ -329,7 +320,7 @@ export async function POST(request: NextRequest) {
 
     } else {
       // Payment failed
-      await addDoc(collection(db, 'billing_records'), {
+      await db.collection('billing_records').add({
         sessionId: sessionId,
         clientId: sessionData.clientId,
         clientName: sessionData.clientName,
@@ -341,7 +332,7 @@ export async function POST(request: NextRequest) {
         currency: price.currency,
         stripeMode: stripeMode,
         stripeAccountId: stripeAccountId,
-        billedAt: Timestamp.now(),
+        billedAt: new Date(),
         status: 'failed',
         error: `Payment failed with status: ${paymentIntent.status}`,
         paymentIntentId: paymentIntent.id,
