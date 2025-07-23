@@ -161,6 +161,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify customer has a default payment method
+    try {
+      const customer = await stripe.customers.retrieve(stripeCustomerId, {
+        expand: ['default_source', 'invoice_settings.default_payment_method'],
+      }, {
+        stripeAccount: stripeAccountId,
+      });
+
+      if (customer.deleted) {
+        return NextResponse.json(
+          { error: 'Customer account is no longer active' },
+          { status: 400 }
+        );
+      }
+
+      const hasPaymentMethod = customer.invoice_settings?.default_payment_method || 
+                              customer.default_source;
+
+      if (!hasPaymentMethod) {
+        return NextResponse.json(
+          { error: 'Client must add a payment method before billing can be processed' },
+          { status: 400 }
+        );
+      }
+    } catch (customerError: any) {
+      console.error('[Billing API] Customer verification failed:', customerError);
+      return NextResponse.json(
+        { 
+          error: 'Unable to verify customer payment information',
+          details: customerError.message 
+        },
+        { status: 400 }
+      );
+    }
+
     // Initialize Stripe
     const secretKey = getStripeSecretKey(stripeMode);
     const stripe = new Stripe(secretKey, { 
@@ -205,28 +240,49 @@ export async function POST(request: NextRequest) {
     const price = prices.data[0];
 
     // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: price.unit_amount!,
-      currency: price.currency,
-      customer: stripeCustomerId,
-      payment_method_types: ['card'],
-      confirm: true,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: 'never',
-      },
-      metadata: {
-        sessionId: sessionId,
-        sessionType: sessionData.sessionType,
-        clientId: sessionData.clientId,
-        clientName: sessionData.clientName,
-        coachName: sessionData.coachName,
-        companyId: companyId,
-      },
-      description: `${sessionData.sessionType} session with ${sessionData.coachName} for ${sessionData.clientName}`,
-    }, {
-      stripeAccount: stripeAccountId,
-    });
+    let paymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: price.unit_amount!,
+        currency: price.currency,
+        customer: stripeCustomerId,
+        payment_method_types: ['card'],
+        confirm: true,
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
+        metadata: {
+          sessionId: sessionId,
+          sessionType: sessionData.sessionType,
+          clientId: sessionData.clientId,
+          clientName: sessionData.clientName,
+          coachName: sessionData.coachName,
+          companyId: companyId,
+        },
+        description: `${sessionData.sessionType} session with ${sessionData.coachName} for ${sessionData.clientName}`,
+      }, {
+        stripeAccount: stripeAccountId,
+      });
+    } catch (paymentError: any) {
+      console.error('[Billing API] Payment intent creation failed:', {
+        error: paymentError.message,
+        code: paymentError.code,
+        type: paymentError.type,
+        stripeCustomerId,
+        stripeAccountId,
+        amount: price.unit_amount,
+        currency: price.currency,
+      });
+      
+      return NextResponse.json(
+        { 
+          error: 'Payment processing failed',
+          details: paymentError.message || 'Unable to process payment'
+        },
+        { status: 400 }
+      );
+    }
 
     // Check payment status
     if (paymentIntent.status === 'succeeded') {
