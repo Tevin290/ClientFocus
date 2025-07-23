@@ -254,12 +254,13 @@ export async function POST(request: NextRequest) {
       // Add payment method or automatic payment methods
       if (defaultPaymentMethodId) {
         paymentIntentParams.payment_method = defaultPaymentMethodId;
-      } else {
-        paymentIntentParams.automatic_payment_methods = {
-          enabled: true,
-          allow_redirects: 'never',
-        };
       }
+      
+      // Always set automatic payment methods to avoid redirect issues
+      paymentIntentParams.automatic_payment_methods = {
+        enabled: true,
+        allow_redirects: 'never',
+      };
 
       paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, {
         stripeAccount: stripeAccountId,
