@@ -5,10 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useRole } from '@/context/role-context';
 import { useLoading } from '@/context/loading-context';
-import { CheckCircle, XCircle, ExternalLink, CreditCard, DollarSign, Settings } from 'lucide-react';
-import { createConnectOAuthLink } from '@/lib/stripeService';
+import { CheckCircle, XCircle, ExternalLink, CreditCard, DollarSign, Settings, Unplug } from 'lucide-react';
+import { createConnectOAuthLink, disconnectStripeAccount } from '@/lib/stripeService';
 
 interface StripeConnectProps {
   mode: 'test' | 'live';
@@ -17,6 +28,7 @@ interface StripeConnectProps {
 export default function StripeConnect({ mode }: StripeConnectProps) {
   const { companyProfile } = useRole();
   const [error, setError] = useState<string>('');
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
   const { showLoading, showError } = useLoading();
 
   const isTestMode = mode === 'test';
@@ -53,6 +65,39 @@ export default function StripeConnect({ mode }: StripeConnectProps) {
       }
     } catch (err: any) {
       showError(err.message || 'Failed to initiate Stripe connection');
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!companyProfile?.id) {
+      setError('Company profile not found');
+      return;
+    }
+
+    showLoading({
+      title: 'Disconnecting Stripe',
+      message: 'Removing Stripe connection...',
+    });
+
+    setError('');
+    setShowDisconnectDialog(false);
+
+    try {
+      const result = await disconnectStripeAccount(companyProfile.id, mode);
+      
+      if (result.error) {
+        showError(result.error);
+        return;
+      }
+
+      if (result.success) {
+        // Refresh the page to update the UI
+        window.location.reload();
+      } else {
+        showError('Failed to disconnect Stripe account');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Failed to disconnect Stripe account');
     }
   };
 
@@ -149,21 +194,57 @@ export default function StripeConnect({ mode }: StripeConnectProps) {
               <p className="text-sm text-gray-600 mb-3">
                 Your Stripe account is connected but requires additional setup to accept payments.
               </p>
-              <Button 
-                onClick={handleConnect} 
-                variant="outline"
-                className="w-full"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Complete Stripe Setup
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  onClick={handleConnect} 
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Complete Stripe Setup
+                </Button>
+                <AlertDialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
+                  <AlertDialogTrigger asChild>
+                    <Button 
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                    >
+                      <Unplug className="h-4 w-4 mr-2" />
+                      Disconnect Account
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Disconnect Stripe Account?</AlertDialogTitle>
+                      <AlertDialogDescription asChild>
+                        <div>
+                          <p>Are you sure you want to disconnect your {mode} Stripe account? This will:</p>
+                          <ul className="list-disc ml-5 mt-2 space-y-1">
+                            <li>Remove the connection to your Stripe account</li>
+                            <li>Stop all payment processing for this mode</li>
+                            <li>Require you to reconnect and potentially re-verify your account</li>
+                          </ul>
+                          <p className="mt-2">This action cannot be undone.</p>
+                        </div>
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDisconnect} className="bg-red-600 hover:bg-red-700">
+                        Disconnect Account
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           ) : (
             <div>
               <p className="text-sm text-green-600 mb-3">
                 ✓ Your Stripe account is connected and ready to accept payments.
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-3">
                 <Button 
                   onClick={handleConnect} 
                   variant="outline"
@@ -181,6 +262,39 @@ export default function StripeConnect({ mode }: StripeConnectProps) {
                   Stripe Dashboard
                 </Button>
               </div>
+              <AlertDialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    <Unplug className="h-4 w-4 mr-2" />
+                    Disconnect Stripe Account
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Disconnect Stripe Account?</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div>
+                        <p>Are you sure you want to disconnect your {mode} Stripe account? This will:</p>
+                        <ul className="list-disc ml-5 mt-2 space-y-1">
+                          <li>Remove the connection to your Stripe account</li>
+                          <li>Stop all payment processing for this mode</li>
+                          <li>Require you to reconnect and potentially re-verify your account</li>
+                        </ul>
+                        <p className="mt-2">This action cannot be undone.</p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDisconnect} className="bg-red-600 hover:bg-red-700">
+                      Disconnect Account
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           )}
         </div>

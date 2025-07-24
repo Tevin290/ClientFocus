@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 
 interface LoadingModalProps {
@@ -46,6 +46,9 @@ export function LoadingModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`sm:max-w-md ${status === 'loading' ? '[&>button]:hidden' : ''}`}>
+        <DialogHeader className="sr-only">
+          <DialogTitle>{getTitle()}</DialogTitle>
+        </DialogHeader>
         <div className="flex flex-col items-center justify-center space-y-4 py-8">
           {getIcon()}
           

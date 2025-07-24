@@ -150,7 +150,28 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     setIsLoading(true);
-    await auth.signOut();
+    try {
+      // Get company slug before signing out
+      const companySlug = companyProfile?.slug;
+      
+      await auth.signOut();
+      
+      // Redirect to company login page if company slug exists, otherwise default login
+      if (companySlug) {
+        router.replace(`/${companySlug}/login`);
+      } else {
+        router.replace('/login');
+      }
+    } catch (error) {
+      console.error('[RoleContext] Error during logout:', error);
+      // Fallback to company login page if slug exists, otherwise default login
+      const companySlug = companyProfile?.slug;
+      if (companySlug) {
+        router.replace(`/${companySlug}/login`);
+      } else {
+        router.replace('/login');
+      }
+    }
   };
 
   return (

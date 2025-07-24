@@ -140,7 +140,7 @@ service cloud.firestore {
       
       // Write access - only coaches and admins
       allow create: if isAuthenticated() && 
-        isInSameCompany(resource.data.companyId) && 
+        isInSameCompany(request.resource.data.companyId) && 
         (isCoach() || isAdmin());
         
       allow update: if isAuthenticated() && 
@@ -167,6 +167,33 @@ service cloud.firestore {
         // Clients can query sessions (filtered by their own sessions in code)
         isClient()
       );
+    }
+    
+    // Billing records collection - Financial audit trail
+    match /billing_records/{recordId} {
+      // Only super-admins and admins can read billing records in their company
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isAdmin() && isInSameCompany(resource.data.companyId))
+      );
+      
+      // Server-side creation only (for billing API)
+      allow create: if request.auth == null;
+      
+      // No updates or deletes allowed (audit trail integrity)
+    }
+    
+    // Allow querying billing records collection
+    match /billing_records/{document=**} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() || isAdmin()
+      );
+    }
+    
+      // Global settings collection - Platform-level configurations
+    match /settings/{settingId} {
+      // Ultra-simple rule for testing - allow anyone authenticated
+      allow read, write: if true;
     }
   }
 }

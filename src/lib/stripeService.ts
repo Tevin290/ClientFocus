@@ -2,6 +2,12 @@
 'use server';
 
 import Stripe from 'stripe';
+
+// Helper function to serialize Stripe objects for client components
+function serializeStripeObject(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(JSON.stringify(obj));
+}
 import { getStripeSecretKey } from './stripe';
 
 /**
@@ -23,13 +29,19 @@ export async function createConnectOAuthLink(
 
     // Use different redirect URIs for test vs live modes
     const getRedirectUri = (mode: 'test' | 'live') => {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+      if (!baseUrl) {
+        throw new Error('NEXT_PUBLIC_APP_URL environment variable is required');
+      }
+      
       if (mode === 'live') {
-        // For live mode, use HTTPS and production URL
-        const productionUrl = process.env.NEXT_PUBLIC_APP_URL;
-        return `${productionUrl}/api/stripe/connect/callback`.replace('http://', 'https://');
+        // For live mode, ensure HTTPS
+        const url = new URL(baseUrl);
+        url.protocol = 'https:';
+        return `${url.origin}/api/stripe/connect/callback`;
       } else {
-        // For test mode, use the development URL (can be HTTP)
-        return `${process.env.NEXT_PUBLIC_APP_URL}/api/stripe/connect/callback`;
+        // For test mode, use the configured URL as-is
+        return `${baseUrl}/api/stripe/connect/callback`;
       }
     };
 
@@ -117,6 +129,43 @@ export async function createCheckoutSetupSession(
     const secretKey = getStripeSecretKey(mode);
     const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
 
+    // For live mode, we'll let Stripe handle the validation during checkout
+    // This allows the normal onboarding flow to work properly
+    if (mode === 'live') {
+      try {
+        const account = await stripe.accounts.retrieve(stripeAccountId);
+        
+        // Check for account issues
+        if (account.requirements?.disabled_reason) {
+          return { 
+            url: null, 
+            error: `Stripe account needs attention: ${account.requirements.disabled_reason}. Please complete the required information in your Stripe Dashboard or re-run Connect onboarding.` 
+          };
+        }
+
+        // Check for past due requirements
+        if (account.requirements?.past_due && account.requirements.past_due.length > 0) {
+          return { 
+            url: null, 
+            error: `Stripe account has past due requirements: ${account.requirements.past_due.join(', ')}. Please complete these in your Stripe Dashboard or re-run Connect onboarding.` 
+          };
+        }
+
+        // Let Stripe handle other validation during checkout
+        // This allows for a smoother user experience
+        
+      } catch (accountError: any) {
+        // Only fail if we can't reach the account at all
+        if (accountError.code === 'account_invalid') {
+          return { 
+            url: null, 
+            error: 'Invalid Stripe account. Please reconnect your Stripe account.' 
+          };
+        }
+        // For other errors, continue and let Stripe checkout handle it
+      }
+    }
+
     let stripeCustomerId = existingStripeCustomerId;
     let newStripeCustomerId: string | undefined = undefined;
 
@@ -171,7 +220,7 @@ export async function createProduct(
       stripeAccount: stripeAccountId,
     });
 
-    return { product };
+    return { product: serializeStripeObject(product) };
   } catch (error: any) {
     console.error('[Stripe Service] Error creating product:', error);
     return { product: null, error: error.message || 'Failed to create product.' };
@@ -200,7 +249,7 @@ export async function createPrice(
       stripeAccount: stripeAccountId,
     });
 
-    return { price };
+    return { price: serializeStripeObject(price) };
   } catch (error: any) {
     console.error('[Stripe Service] Error creating price:', error);
     return { price: null, error: error.message || 'Failed to create price.' };
@@ -225,7 +274,7 @@ export async function getProducts(
       stripeAccount: stripeAccountId,
     });
 
-    return { products: products.data };
+    return { products: serializeStripeObject(products.data) };
   } catch (error: any) {
     console.error('[Stripe Service] Error fetching products:', error);
     return { products: null, error: error.message || 'Failed to fetch products.' };
@@ -250,9 +299,132 @@ export async function getPrices(
       stripeAccount: stripeAccountId,
     });
 
-    return { prices: prices.data };
+    return { prices: serializeStripeObject(prices.data) };
   } catch (error: any) {
     console.error('[Stripe Service] Error fetching prices:', error);
     return { prices: null, error: error.message || 'Failed to fetch prices.' };
+  }
+}
+
+/**
+ * Disconnects a Stripe account by clearing the account ID and onboarding status
+ */
+export async function disconnectStripeAccount(
+  companyId: string,
+  mode: 'test' | 'live'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { updateCompanyProfile } = await import('./firestoreService');
+    
+    const accountIdField = mode === 'test' ? 'stripeAccountId_test' : 'stripeAccountId_live';
+    const onboardedField = mode === 'test' ? 'stripeAccountOnboarded_test' : 'stripeAccountOnboarded_live';
+    
+    // Clear the Stripe account data for the specified mode
+    await updateCompanyProfile(companyId, {
+      [accountIdField]: null,
+      [onboardedField]: false,
+    });
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error disconnecting Stripe account:', error);
+    return { success: false, error: error.message || 'Failed to disconnect Stripe account.' };
+  }
+}
+
+/**
+ * Creates a Stripe customer portal session for managing payment methods
+ */
+export async function createCustomerPortalSession(
+  stripeAccountId: string,
+  stripeCustomerId: string,
+  mode: 'test' | 'live'
+): Promise<{ url: string | null; error?: string }> {
+  try {
+    const secretKey = getStripeSecretKey(mode);
+    const stripe = new Stripe(secretKey, { apiVersion: '2025-06-30.basil', typescript: true });
+
+    // Ensure billing portal configuration exists and is properly configured
+    const configurations = await stripe.billingPortal.configurations.list({
+      limit: 10,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    let activeConfig = configurations.data.find(config => config.is_default);
+
+    if (!activeConfig && configurations.data.length === 0) {
+      // Create default billing portal configuration if none exists
+      activeConfig = await stripe.billingPortal.configurations.create({
+        features: {
+          customer_update: {
+            allowed_updates: ['email', 'tax_id'],
+            enabled: true,
+          },
+          invoice_history: { enabled: true },
+          payment_method_update: { enabled: true },
+          subscription_cancel: { 
+            enabled: false,
+          },
+        },
+        business_profile: {
+          privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL}/privacy`,
+          terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL}/terms`,
+        },
+      }, {
+        stripeAccount: stripeAccountId,
+      });
+    } else if (!activeConfig) {
+      // Use the first configuration if no default is found
+      activeConfig = configurations.data[0];
+    }
+
+    // If the existing configuration has subscription features that might cause issues,
+    // create a new simplified configuration
+    if (activeConfig.features.subscription_update?.enabled) {
+      try {
+        const newConfig = await stripe.billingPortal.configurations.create({
+          features: {
+            customer_update: {
+              allowed_updates: ['email', 'tax_id'],
+              enabled: true,
+            },
+            invoice_history: { enabled: true },
+            payment_method_update: { enabled: true },
+            subscription_cancel: { 
+              enabled: false,
+            },
+          },
+          business_profile: {
+            privacy_policy_url: `${process.env.NEXT_PUBLIC_APP_URL}/privacy`,
+            terms_of_service_url: `${process.env.NEXT_PUBLIC_APP_URL}/terms`,
+          },
+        }, {
+          stripeAccount: stripeAccountId,
+        });
+        
+        // Set the new configuration as default if needed
+        if (!configurations.data.find(config => config.is_default)) {
+          // There's no API to set a configuration as default after creation
+          // The first configuration created automatically becomes the default
+          console.log('[Stripe Service] Created new billing portal configuration:', newConfig.id);
+        }
+      } catch (configError: any) {
+        console.warn('[Stripe Service] Could not create new configuration:', configError.message);
+        // Continue with existing configuration
+      }
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/client/settings`,
+    }, {
+      stripeAccount: stripeAccountId,
+    });
+
+    return { url: session.url };
+  } catch (error: any) {
+    console.error('[Stripe Service] Error creating customer portal session:', error);
+    return { url: null, error: error.message || 'Failed to create customer portal session.' };
   }
 }

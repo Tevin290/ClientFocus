@@ -11,7 +11,7 @@ import * as z from 'zod';
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Save, TriangleAlert, Users, CreditCard, CheckCircle } from 'lucide-react';
+import { Loader2, Save, TriangleAlert, Users, CreditCard, CheckCircle, Settings, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getAllCoaches, updateUserProfile, type UserProfile } from '@/lib/firestoreService';
 import { useRole } from '@/context/role-context';
@@ -20,8 +20,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProfilePictureForm } from '@/components/forms/profile-picture-form';
-import { createCheckoutSetupSession } from '@/lib/stripeService';
-import { getStripeMode } from '@/lib/stripeClient';
+import { createCheckoutSetupSession, createCustomerPortalSession } from '@/lib/stripeService';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const selectCoachSchema = z.object({
@@ -38,14 +37,22 @@ export default function ClientSettingsPage() {
   
   const [isSaving, setIsSaving] = useState(false);
   const [isRedirectingToStripe, setIsRedirectingToStripe] = useState(false);
+  const [isRedirectingToPortal, setIsRedirectingToPortal] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
-  const [stripeMode, setStripeMode] = useState<'test' | 'live'>('test');
+  const [localStripeMode, setLocalStripeMode] = useState<'test' | 'live'>('test');
+  
+  // Use local mode instead of the server hook to avoid permission errors for clients
+  const stripeMode = localStripeMode;
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
-    setStripeMode(getStripeMode());
+    
+    // Initialize local stripe mode from localStorage
+    import('@/lib/stripeClient').then(({ getStripeMode }) => {
+      setLocalStripeMode(getStripeMode());
+    });
 
     if (searchParams.get('payment_setup_success')) {
         toast({
@@ -129,8 +136,15 @@ export default function ClientSettingsPage() {
 
   const companyStripeAccountId = stripeMode === 'test' ? companyProfile?.stripeAccountId_test : companyProfile?.stripeAccountId_live;
   const isCompanyOnboarded = stripeMode === 'test' ? companyProfile?.stripeAccountOnboarded_test : companyProfile?.stripeAccountOnboarded_live;
-  const clientStripeCustomerId = stripeMode === 'test' ? userProfile?.stripeCustomerId_test : userProfile?.stripeCustomerId_live;
+  
+  // Get the correct stripe customer ID based on mode, but ensure it's not empty/undefined
+  const clientStripeCustomerId = (() => {
+    const rawId = stripeMode === 'test' ? userProfile?.stripeCustomerId_test : userProfile?.stripeCustomerId_live;
+    return rawId && rawId.trim().length > 0 ? rawId : null;
+  })();
+  
   const clientStripeCustomerIdField = stripeMode === 'test' ? 'stripeCustomerId_test' : 'stripeCustomerId_live';
+  
 
   const handleAddPaymentMethod = async () => {
     if (!companyStripeAccountId || !user || !userProfile?.companyId) {
@@ -144,7 +158,7 @@ export default function ClientSettingsPage() {
           companyStripeAccountId, 
           user.uid, 
           user.email!,
-          clientStripeCustomerId,
+          clientStripeCustomerId || undefined,
           stripeMode
         );
 
@@ -160,6 +174,30 @@ export default function ClientSettingsPage() {
     } catch (err: any) {
         toast({ title: "Could not connect to Stripe", description: err.message, variant: "destructive"});
         setIsRedirectingToStripe(false);
+    }
+  }
+
+  const handleEditPaymentMethod = async () => {
+    if (!companyStripeAccountId || !clientStripeCustomerId) {
+        toast({ title: "Error", description: "Payment method information not available.", variant: "destructive" });
+        return;
+    }
+    setIsRedirectingToPortal(true);
+    try {
+        const { url, error } = await createCustomerPortalSession(
+          companyStripeAccountId,
+          clientStripeCustomerId!, // Non-null assertion since we check above
+          stripeMode
+        );
+
+        if (error || !url) {
+            throw new Error(error || 'Failed to create customer portal session.');
+        }
+
+        window.location.href = url;
+    } catch (err: any) {
+        toast({ title: "Could not open payment portal", description: err.message, variant: "destructive"});
+        setIsRedirectingToPortal(false);
     }
   }
 
@@ -183,6 +221,23 @@ export default function ClientSettingsPage() {
   return (
     <div>
       <PageHeader title="My Settings" description="Manage your coach assignment and profile details."/>
+      
+      {/* Stripe Mode Indicator */}
+      <div className="mt-6 mb-2">
+        <Alert className={`border-l-4 ${stripeMode === 'live' ? 'border-l-green-500 bg-green-50 dark:bg-green-950' : 'border-l-orange-500 bg-orange-50 dark:bg-orange-950'}`}>
+          <AlertCircle className={`h-4 w-4 ${stripeMode === 'live' ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`} />
+          <UiAlertTitle className={stripeMode === 'live' ? 'text-green-800 dark:text-green-200' : 'text-orange-800 dark:text-orange-200'}>
+            {stripeMode === 'live' ? '🔴 Live Mode Active' : '🟡 Test Mode Active'}
+          </UiAlertTitle>
+          <AlertDescription className={stripeMode === 'live' ? 'text-green-700 dark:text-green-300' : 'text-orange-700 dark:text-orange-300'}>
+            {stripeMode === 'live' 
+              ? 'Real payments are being processed. Your actual payment method will be charged for approved sessions.' 
+              : 'Test mode is active. No real payments will be processed. This is for testing purposes only.'
+            }
+          </AlertDescription>
+        </Alert>
+      </div>
+      
       <div className="space-y-8 mt-8">
         <ProfilePictureForm user={user} userProfile={userProfile} />
 
@@ -198,14 +253,28 @@ export default function ClientSettingsPage() {
           </CardHeader>
           <CardContent>
             {clientStripeCustomerId ? (
-                 <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
-                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-                    <div>
-                        <p className="font-semibold text-green-800 dark:text-green-200">Payment Method on File</p>
-                        <p className="text-sm text-green-700 dark:text-green-300">
-                           Your account is ready for billing in {stripeMode} mode.
-                        </p>
+                <div className="space-y-4">
+                    <div className="flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                        <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                        <div>
+                            <p className="font-semibold text-green-800 dark:text-green-200">Payment Method on File</p>
+                            <p className="text-sm text-green-700 dark:text-green-300">
+                               Your account is ready for billing in {stripeMode} mode.
+                            </p>
+                        </div>
                     </div>
+                    <Button 
+                        onClick={handleEditPaymentMethod} 
+                        disabled={isRedirectingToPortal || !isCompanyOnboarded}
+                        variant="outline"
+                    >
+                        {isRedirectingToPortal ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Settings className="mr-2 h-4 w-4" />
+                        )}
+                        {isRedirectingToPortal ? 'Opening Portal...' : 'Edit Payment Method'}
+                    </Button>
                 </div>
             ) : (
                 <Button onClick={handleAddPaymentMethod} disabled={isRedirectingToStripe || !isCompanyOnboarded}>

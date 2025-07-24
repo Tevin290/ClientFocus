@@ -38,7 +38,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { getStripeMode, setStripeMode } from '@/lib/stripeClient';
+import { useStripeMode } from '@/hooks/use-stripe-mode';
 
 
 const selectCoachSchema = z.object({
@@ -52,24 +52,99 @@ export default function AdminSettingsPage() {
   const [isMigrating, setIsMigrating] = useState(false);
   const [coaches, setCoaches] = useState<UserProfile[]>([]);
   const [isFetchingCoaches, setIsFetchingCoaches] = useState(true);
-  const [isTestMode, setIsTestMode] = useState(true);
+  const [showModeConfirmation, setShowModeConfirmation] = useState(false);
+  const [pendingMode, setPendingMode] = useState<'test' | 'live' | null>(null);
+  const [localStripeMode, setLocalStripeMode] = useState<'test' | 'live'>('test');
   const { toast } = useToast();
   const { user, userProfile, role, isLoading: isRoleLoading } = useRole();
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+  
+  // Always use the hook but with enhanced error handling
+  const stripeModeHook = useStripeMode();
+  const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super-admin';
+  
+  // Use the hook data for admins, localStorage for others
+  const stripeMode = isAdmin ? stripeModeHook.stripeMode : localStripeMode;
+  const isStripeModeLoading = isAdmin ? stripeModeHook.isLoading : false;
+  const updateStripeMode = isAdmin ? stripeModeHook.updateStripeMode : null;
+  const stripeModeError = isAdmin ? stripeModeHook.error : null;
 
   useEffect(() => {
     setFirebaseAvailable(isFirebaseConfigured());
-    setIsTestMode(getStripeMode() === 'test');
-  }, []);
+    
+    // Initialize local stripe mode for non-admins from localStorage
+    if (!isAdmin) {
+      import('@/lib/stripeClient').then(({ getStripeMode }) => {
+        setLocalStripeMode(getStripeMode());
+      });
+    }
+  }, [isAdmin]);
+
+  // Show error if stripe mode sync fails (only for admins)
+  useEffect(() => {
+    if (stripeModeError && isAdmin) {
+      toast({
+        title: 'Payment Mode Sync Error',
+        description: stripeModeError,
+        variant: 'destructive',
+      });
+    }
+  }, [stripeModeError, toast, isAdmin]);
 
   const handleTestModeChange = (checked: boolean) => {
     const newMode = checked ? 'test' : 'live';
-    setStripeMode(newMode);
-    setIsTestMode(checked);
-    toast({
+    setPendingMode(newMode);
+    setShowModeConfirmation(true);
+  };
+
+  const confirmModeSwitch = async () => {
+    if (!pendingMode || !user?.uid || !updateStripeMode) return;
+    
+    setShowModeConfirmation(false);
+    
+    try {
+      // Clear any cached data first
+      if (typeof window !== 'undefined') {
+        // Clear localStorage cache for Stripe data
+        const keysToRemove = Object.keys(localStorage).filter(key => 
+          key.startsWith('stripe_') && key !== 'stripe_test_mode'
+        );
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        // Clear sessionStorage as well
+        const sessionKeysToRemove = Object.keys(sessionStorage).filter(key => 
+          key.startsWith('stripe_')
+        );
+        sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key));
+      }
+      
+      await updateStripeMode(pendingMode, user.uid);
+      
+      toast({
         title: `Stripe Platform Mode Changed`,
-        description: `The entire application is now interacting with Stripe in ${newMode === 'test' ? 'Test' : 'Live'} mode.`,
-    });
+        description: `The entire application is now in ${pendingMode === 'test' ? 'Test' : 'Live'} mode. All users will be automatically updated. Page will refresh to load new data.`,
+        variant: 'default',
+      });
+      
+      // Refresh the page after a short delay to load fresh data
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (error: any) {
+      toast({
+        title: 'Mode Switch Failed',
+        description: error.message || 'Failed to switch Stripe mode. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPendingMode(null);
+    }
+  };
+
+  const cancelModeSwitch = () => {
+    setShowModeConfirmation(false);
+    setPendingMode(null);
   };
 
   const form = useForm<SelectCoachFormValues>({
@@ -199,40 +274,76 @@ export default function AdminSettingsPage() {
       <div className="space-y-8 mt-8">
         <ProfilePictureForm user={user} userProfile={userProfile} />
 
-        <Card className="w-full max-w-2xl shadow-light">
-            <CardHeader>
-                <CardTitle className="font-headline flex items-center">
-                    <SwitchIcon className="mr-2 h-5 w-5 text-primary"/>
-                    Stripe Platform Mode
-                </CardTitle>
-                 <CardDescription>
-                    This is a global, developer-level setting. It controls whether the entire ClientFocus platform uses Stripe's test environment or live environment for all companies.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex items-center space-x-2">
-                     <Switch
-                      id="stripe-test-mode"
-                      checked={isTestMode}
-                      onCheckedChange={handleTestModeChange}
-                      className={isTestMode ? 'data-[state=checked]:animate-glow-pulse' : ''}
-                      aria-label="Stripe Test Mode"
-                    />
-                    <Label htmlFor="stripe-test-mode" className="font-medium">
-                      {isTestMode ? 'Test Mode Enabled' : 'Live Mode Enabled'}
-                    </Label>
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                    {isTestMode ? 'The platform is using Stripe test keys. No real charges will be made.' : 'The platform is in live mode. Real charges will be processed.'}
-                </p>
-            </CardContent>
-        </Card>
+        {(userProfile?.role === 'admin' || userProfile?.role === 'super-admin') && (
+          <Card className="w-full max-w-2xl shadow-light">
+              <CardHeader>
+                  <CardTitle className="font-headline flex items-center">
+                      <SwitchIcon className="mr-2 h-5 w-5 text-primary"/>
+                      Stripe Platform Mode
+                  </CardTitle>
+                   <CardDescription>
+                      {userProfile?.role === 'super-admin' 
+                        ? 'This is a global, developer-level setting restricted to super-admins. It controls whether the entire ClientFocus platform uses Stripe\'s test environment or live environment for all companies.'
+                        : 'Control whether the entire ClientFocus platform uses Stripe\'s test environment or live environment for all companies.'
+                      }
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <div className="flex items-center space-x-2">
+                       <Switch
+                        id="stripe-test-mode"
+                        checked={stripeMode === 'test'}
+                        onCheckedChange={handleTestModeChange}
+                        disabled={isStripeModeLoading}
+                        className={stripeMode === 'test' ? 'data-[state=checked]:animate-glow-pulse' : ''}
+                        aria-label="Stripe Test Mode"
+                      />
+                      {isStripeModeLoading && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+                      <Label htmlFor="stripe-test-mode" className="font-medium">
+                        {stripeMode === 'test' ? 'Test Mode Enabled' : 'Live Mode Enabled'}
+                      </Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                      {stripeMode === 'test' ? 'The platform is using Stripe test keys. No real charges will be made.' : 'The platform is in live mode. Real charges will be processed.'}
+                  </p>
+              </CardContent>
+          </Card>
+        )}
+
+        {userProfile?.role && !['admin', 'super-admin'].includes(userProfile.role) && (
+          <Card className="w-full max-w-2xl shadow-light border-muted">
+              <CardHeader>
+                  <CardTitle className="font-headline flex items-center text-muted-foreground">
+                      <SwitchIcon className="mr-2 h-5 w-5"/>
+                      Stripe Platform Mode
+                  </CardTitle>
+                   <CardDescription>
+                      Current platform mode (read-only). Only admins can change this setting.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 opacity-60">
+                        <div className={`w-6 h-6 rounded-full border-2 ${stripeMode === 'test' ? 'bg-orange-500 border-orange-500' : 'bg-green-500 border-green-500'}`}>
+                          <div className={`w-2 h-2 bg-white rounded-full m-1 transform transition-transform ${stripeMode === 'test' ? 'translate-x-0' : 'translate-x-2'}`}></div>
+                        </div>
+                        <Label className="font-medium text-muted-foreground">
+                          {stripeMode === 'test' ? 'Test Mode Enabled' : 'Live Mode Enabled'}
+                        </Label>
+                      </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                      {stripeMode === 'test' ? 'The platform is using Stripe test keys. No real charges will be made.' : 'The platform is in live mode. Real charges will be processed.'}
+                  </p>
+              </CardContent>
+          </Card>
+        )}
 
         <CreateCompany />
 
         <div className="grid gap-6">
           <StripeConnect mode="test" />
-          {!isTestMode && <StripeConnect mode="live" />}
+          {stripeMode !== 'test' && <StripeConnect mode="live" />}
         </div>
 
         <Card className="shadow-light">
@@ -343,6 +454,48 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mode Switch Confirmation Dialog */}
+      <AlertDialog open={showModeConfirmation} onOpenChange={setShowModeConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center">
+              <TriangleAlert className="h-5 w-5 text-amber-500 mr-2" />
+              Confirm Stripe Mode Switch
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to switch the entire platform to <strong>{pendingMode === 'test' ? 'Test' : 'Live'}</strong> mode.
+            </AlertDialogDescription>
+            <div className="space-y-2 text-sm">
+              <div className="font-medium text-amber-600">
+                This will affect ALL users immediately:
+              </div>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>All payment processing will switch to {pendingMode === 'test' ? 'test' : 'live'} mode</li>
+                <li>Stripe Connect accounts will need to be {pendingMode === 'test' ? 'test' : 'live'}</li>
+                <li>Active transactions may be interrupted</li>
+                <li>Users will need to refresh their browsers</li>
+                <li>Cached data will be cleared</li>
+              </ul>
+              <div className="text-destructive font-medium">
+                {pendingMode === 'live' ? 
+                  '⚠️ LIVE MODE: Real money will be processed!' : 
+                  '✅ TEST MODE: No real charges will be made.'
+                }
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelModeSwitch}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmModeSwitch}
+              className={pendingMode === 'live' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}
+            >
+              Switch to {pendingMode === 'test' ? 'Test' : 'Live'} Mode
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

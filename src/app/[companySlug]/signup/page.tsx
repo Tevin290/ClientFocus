@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -23,6 +24,7 @@ export default function CompanySignupPage() {
   const router = useRouter();
   const params = useParams();
   const { role, isLoading: roleLoading } = useRole();
+  const { toast } = useToast();
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [coaches, setCoaches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +113,25 @@ export default function CompanySignupPage() {
       
       // Navigation will be handled by role context
     } catch (err: any) {
-      setError(err.message || 'Signup failed');
+      let toastMessage = 'An unexpected error occurred during sign up. Please try again.';
+      if (err.code) {
+        switch (err.code) {
+          case 'auth/email-already-in-use':
+            toastMessage = 'This email address is already in use.';
+            break;
+          case 'auth/weak-password':
+            toastMessage = 'The password is too weak.';
+            break;
+          case 'permission-denied':
+            toastMessage = "Signup failed due to permissions. Please check your Firestore rules and contact support.";
+            break;
+          default:
+            toastMessage = `An error occurred: ${err.code}. Please try again.`;
+        }
+      } else if (err.message) {
+        toastMessage = err.message;
+      }
+      toast({ title: 'Sign Up Failed', description: toastMessage, variant: 'destructive' });
     } finally {
       setIsSigningUp(false);
     }
@@ -259,11 +279,6 @@ export default function CompanySignupPage() {
               />
             </div>
 
-            {error && (
-              <Alert>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
 
             <Button 
               type="submit" 
